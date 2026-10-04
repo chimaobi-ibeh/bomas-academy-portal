@@ -187,12 +187,33 @@ export function SiteHeader() {
     return () => document.removeEventListener("keydown", onKey);
   }, [mobile]);
 
+  // While the mobile menu is open the page behind it must not move. Locking only the body
+  // is not enough on phones, so the page is pinned in place and put back exactly where it
+  // was when the menu closes.
   useEffect(() => {
     if (!mobile) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const y = window.scrollY;
+    const html = document.documentElement;
+    const body = document.body;
+    const before = {
+      htmlOverflow: html.style.overflow,
+      position: body.style.position,
+      top: body.style.top,
+      width: body.style.width,
+      overflow: body.style.overflow,
+    };
+    html.style.overflow = "hidden";
+    body.style.position = "fixed";
+    body.style.top = `-${y}px`;
+    body.style.width = "100%";
+    body.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = prev;
+      html.style.overflow = before.htmlOverflow;
+      body.style.position = before.position;
+      body.style.top = before.top;
+      body.style.width = before.width;
+      body.style.overflow = before.overflow;
+      window.scrollTo({ top: y, behavior: "instant" });
     };
   }, [mobile]);
 
@@ -439,7 +460,7 @@ export function SiteHeader() {
             key="mobile"
             id="mobile-menu"
             ref={panelRef}
-            className={`fixed inset-x-0 bottom-0 z-30 flex flex-col overflow-y-auto bg-navy-deep text-white lg:hidden ${scrolled ? "top-14" : "top-16"}`}
+            className={`fixed inset-x-0 bottom-0 z-30 flex flex-col overflow-y-auto overscroll-contain bg-navy-deep text-white lg:hidden ${scrolled ? "top-14" : "top-16"}`}
             initial={reduce ? false : { clipPath: "inset(0 0 100% 0)" }}
             animate={{ clipPath: "inset(0 0 0% 0)" }}
             exit={{ opacity: 0, transition: { duration: 0.15 } }}
