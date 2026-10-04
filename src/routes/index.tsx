@@ -1,127 +1,498 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight } from "lucide-react";
-import { useSiteContent } from "@/lib/use-site-content";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import heroImg from "@/assets/hero-campus.jpg";
-import { WhyBomas } from "@/components/home/why-bomas";
-import { VisionMission } from "@/components/home/vision-mission";
-import { ValuesTeaser } from "@/components/home/values-teaser";
-import { ProgramsOverview } from "@/components/home/programs-overview";
-import { SchoolSnapshot } from "@/components/home/school-snapshot";
-import { FacilitiesPreview } from "@/components/home/facilities-preview";
-import { GalleryPreview } from "@/components/home/gallery-preview";
-import { Testimonials } from "@/components/home/testimonials";
-import { ContactPreview } from "@/components/home/contact-preview";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  BookOpenText,
+  Clock,
+  Mail,
+  MapPin,
+  Phone,
+  ShieldCheck,
+} from "@/components/icons";
+import { fetchHomeGallery, fetchHomeNews, orNothing } from "@/lib/data";
+import { useSiteContent } from "@/lib/use-site-content";
+import { VALUE_LETTERS } from "@/lib/values";
+import {
+  EASE,
+  HeroTitle,
+  MaskLines,
+  Reveal,
+  Rise,
+  StaggerItem,
+  StaggerList,
+  splitTitle,
+} from "@/components/motion";
+import { PhotoTile, SectionHead } from "@/components/page-parts";
+import { NewsCard } from "@/components/news-card";
+import { BomasLetters } from "@/components/bomas-letters";
+import { facilityIcon } from "@/components/icons";
+import { SlideControls, SlideLayer, useSlideshow, type HeroSlide } from "@/components/hero-slides";
+import missionImg from "@/assets/about-mission.jpg";
+import libraryImg from "@/assets/library-enhanced.jpg";
+import playgroundImg from "@/assets/playground-enhanced.jpg";
+// science.jpg is the photograph of pupils on laptops, so it belongs to ICT.
+import ictImg from "@/assets/science-enhanced.jpg";
+import classroomImg from "@/assets/classroom.jpg";
+import academicEarlyImg from "@/assets/academic-early.webp";
+import academicPrimaryImg from "@/assets/academic-primary.webp";
+import academicSecondaryImg from "@/assets/academic-secondary.webp";
 
 export const Route = createFileRoute("/")({
   head: () => ({
+    // The first hero photograph is the largest thing on screen, so it is asked for at once.
+    links: [{ rel: "preload", as: "image", href: academicEarlyImg, fetchPriority: "high" }],
     meta: [
       { title: "Bomas Academy - Jos, Plateau State" },
-      { name: "description", content: "Bomas Academy is a nurturing learning community in Jos shaping confident, curious and compassionate young minds from early years through senior secondary." },
+      {
+        name: "description",
+        content:
+          "Bomas Academy is a nurturing learning community in Jos shaping confident, curious and compassionate young minds from early years through senior secondary.",
+      },
       { property: "og:title", content: "Bomas Academy - Jos, Plateau State" },
-      { property: "og:description", content: "A nurturing learning community in Jos shaping confident, curious and compassionate young minds." },
+      {
+        property: "og:description",
+        content:
+          "A nurturing learning community in Jos shaping confident, curious and compassionate young minds.",
+      },
     ],
   }),
+  loader: async () => {
+    const [news, gallery] = await Promise.all([
+      orNothing(fetchHomeNews),
+      orNothing(fetchHomeGallery),
+    ]);
+    return { news, gallery };
+  },
   component: Index,
 });
 
+// Only facilities we hold a true photograph of get a photo tile; the rest sit in the list below.
+const FACILITY_IMAGES: [string, string][] = [
+  ["library", libraryImg],
+  ["ict", ictImg],
+  ["computer", ictImg],
+  ["sport", playgroundImg],
+  ["playground", playgroundImg],
+];
+
+function facilityImage(title: string) {
+  const t = title.toLowerCase();
+  return FACILITY_IMAGES.find(([k]) => t.includes(k))?.[1];
+}
+
+// Where each group photograph is anchored when it is cropped, so the faces stay in frame.
+const SLIDE_FOCUS: Record<string, string> = {
+  early: "50% 30%",
+  primary: "50% 30%",
+  secondary: "50% 30%",
+};
+
+const WHY_ICONS = [BookOpenText, ShieldCheck, MapPin];
+
 function Index() {
   const c = useSiteContent();
+
+  const loaded = Route.useLoaderData();
   const { data: latestNews } = useQuery({
     queryKey: ["news_home"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("news_posts")
-        .select("id, slug, title, excerpt, cover_image_url, published_at")
-        .eq("published", true)
-        .order("published_at", { ascending: false })
-        .limit(3);
-      return data ?? [];
-    },
+    queryFn: fetchHomeNews,
+    staleTime: 30_000,
+    initialData: loaded.news,
   });
+
+  const { data: gallery } = useQuery({
+    queryKey: ["gallery_home"],
+    queryFn: fetchHomeGallery,
+    staleTime: 30_000,
+    initialData: loaded.gallery,
+  });
+
+  const why = [1, 2, 3]
+    .map((n) => ({ title: c[`home.why.item${n}.title`], body: c[`home.why.item${n}.body`] }))
+    .filter((w) => w.title);
+
+  const stages = [
+    {
+      id: "early",
+      title: c["academics.early.title"],
+      body: c["academics.early.body"],
+      image: academicEarlyImg,
+    },
+    {
+      id: "primary",
+      title: c["academics.primary.title"],
+      body: c["academics.primary.body"],
+      image: academicPrimaryImg,
+    },
+    {
+      id: "secondary",
+      title: c["academics.secondary.title"],
+      body: c["academics.secondary.body"],
+      image: academicSecondaryImg,
+    },
+  ];
+
+  // The hero shows the three stage photographs in turn.
+  const slides: HeroSlide[] = stages.map((st) => ({
+    id: st.id,
+    src: st.image,
+    label: st.title,
+    focus: SLIDE_FOCUS[st.id],
+  }));
+  const show = useSlideshow(slides.length);
+
+  const values = Object.entries(VALUE_LETTERS).map(([key, letter]) => {
+    const [title, , motto] = (c[`about.values.${key}`] || "").split("\n");
+    return { key, letter, title, motto };
+  });
+
+  const facilities = (c["facilities.items"] || "")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [title, body] = line.split("|").map((s) => s.trim());
+      return { title, body };
+    });
+  const withPhoto = facilities.filter((f) => facilityImage(f.title));
+  const facilityTiles = withPhoto.length >= 3 ? withPhoto.slice(0, 3) : facilities.slice(0, 3);
+  const facilityRest = facilities.filter((f) => !facilityTiles.includes(f));
+
+  const contact = [
+    { Icon: MapPin, label: "Campus", value: c["contact.address"] },
+    {
+      Icon: Phone,
+      label: "Phone",
+      value: c["contact.phone"],
+      href: `tel:${c["contact.phone"].replace(/\s/g, "")}`,
+    },
+    {
+      Icon: Mail,
+      label: "Email",
+      value: c["contact.email"],
+      href: `mailto:${c["contact.email"]}`,
+    },
+    { Icon: Clock, label: "Office hours", value: c["contact.hours"] },
+  ];
 
   return (
     <>
-      <section className="relative -mt-20 min-h-[100svh] overflow-hidden bg-navy-deep text-[oklch(0.98_0.005_85)]">
-        <img src={heroImg} alt="Bomas Academy students" className="absolute inset-0 h-full w-full object-cover opacity-55" width={1600} height={1100} />
-        <div className="absolute inset-0 bg-gradient-to-b from-navy-deep/40 via-navy-deep/55 to-navy-deep" />
-        <div className="relative container-wide flex min-h-[100svh] flex-col justify-end pb-20 pt-32">
-          <p className="reveal text-xs uppercase tracking-[0.32em] text-accent">{c["home.hero.eyebrow"]}</p>
-          <h1 className="reveal reveal-delay-1 mt-6 max-w-4xl font-display text-[clamp(2.5rem,6.5vw,5.5rem)] leading-[1.02] text-white">
-            {c["home.hero.title"]}
-          </h1>
-          <p className="reveal reveal-delay-2 mt-8 max-w-2xl text-lg leading-relaxed text-white/80">
-            {c["home.hero.subtitle"]}
-          </p>
-          <div className="reveal reveal-delay-3 mt-10 flex flex-wrap items-center gap-4">
-            <Link to="/admissions" className="group inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3.5 text-sm font-semibold text-accent-foreground transition-all hover:shadow-xl hover:shadow-accent/30">
-              Begin admissions
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-            </Link>
-            <Link to="/about" className="inline-flex items-center gap-2 rounded-full border border-white/30 px-6 py-3.5 text-sm font-medium text-white transition-colors hover:bg-white/10">
-              Discover our story
-            </Link>
+      {/* Hero: the stage photographs fill the background, headline in the middle-left */}
+      <section className="relative isolate overflow-hidden bg-navy-deep text-white">
+        {/* Phones show each photograph whole above the words; from lg up it is the background. */}
+        <div className="relative aspect-[3/2] lg:absolute lg:inset-0 lg:aspect-auto">
+          <SlideLayer slides={slides} index={show.index} />
+          <div className="absolute inset-0 hidden bg-gradient-to-r from-navy-deep/80 from-0% via-navy-deep/40 via-35% to-transparent to-62% lg:block" />
+        </div>
+        <div className="container-wide relative flex flex-col justify-center pb-24 pt-6 sm:pb-28 lg:h-[min(62vw,860px)] lg:min-h-[560px] lg:py-0 lg:pb-20">
+          <SlideControls
+            {...show}
+            slides={slides}
+            className="mb-5 lg:absolute lg:right-8 lg:top-5 lg:z-10 lg:mb-0 lg:rounded-lg lg:bg-navy-deep/70 lg:pl-3 lg:pr-1"
+          />
+          <div>
+            <Rise>
+              <p className="label-mono flex items-center gap-3 text-gold">
+                <MapPin className="h-5 w-5" />
+                {c["home.hero.eyebrow"]}
+              </p>
+            </Rise>
+            <HeroTitle
+              lines={[c["home.hero.title"]]}
+              className="display-xl mt-4 text-[clamp(2.4rem,9vw,3.4rem)] text-white lg:whitespace-nowrap lg:text-[clamp(2.4rem,3.9vw,4rem)]"
+            />
+            <Rise
+              delay={0.35}
+              className="mt-5 max-w-xl text-base text-white/85 sm:text-lg lg:max-w-md"
+            >
+              <p>{c["home.hero.subtitle"]}</p>
+            </Rise>
+            <Rise delay={0.5} className="mt-7 flex flex-wrap items-center gap-3">
+              <Link
+                to="/admissions"
+                className="press inline-flex h-12 items-center gap-2 rounded-md bg-gold px-6 font-display text-[15px] font-semibold text-navy-deep hover:-translate-y-px hover:brightness-95"
+              >
+                Begin admissions <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+              <Link
+                to="/about"
+                className="press inline-flex h-12 items-center rounded-md border border-white/40 px-6 font-display text-[15px] font-semibold text-white hover:bg-white/10"
+              >
+                Our story
+              </Link>
+            </Rise>
           </div>
         </div>
       </section>
 
-      <WhyBomas />
-      <VisionMission />
-      <ValuesTeaser />
-      <ProgramsOverview />
-      <SchoolSnapshot />
-      <FacilitiesPreview />
-      <GalleryPreview />
+      {/* Stage index: one tile per stage, straight into the programme */}
+      <section className="container-wide relative z-10 -mt-16 sm:-mt-20">
+        <StaggerList as="div" className="grid gap-3 sm:grid-cols-3 sm:gap-4">
+          {stages.map((s) => (
+            <StaggerItem key={s.id} as="div">
+              <PhotoTile
+                to="/academics"
+                hash={s.id}
+                title={s.title}
+                note={s.body}
+                image={s.image}
+                focus={SLIDE_FOCUS[s.id]}
+                aspect="aspect-[4/3]"
+              />
+            </StaggerItem>
+          ))}
+        </StaggerList>
+      </section>
 
+      {/* Statement */}
+      <section className="container-wide pb-6 pt-14 lg:pb-8 lg:pt-20">
+        <MaskLines
+          lines={splitTitle(c["home.intro.title"], 30)}
+          className="mx-auto max-w-5xl text-balance text-center font-display text-[clamp(1.9rem,4.4vw,3.6rem)] font-bold leading-[1.08] tracking-[-0.035em] text-navy-deep"
+        />
+        <Reveal delay={0.1}>
+          <p className="body-copy mx-auto mt-6 max-w-2xl text-center text-muted-foreground">
+            {c["home.intro.body"]}
+          </p>
+        </Reveal>
+        <StaggerList
+          as="ol"
+          className="mt-10 grid gap-px overflow-clip rounded-lg border bg-border lg:grid-cols-3"
+        >
+          {why.map((w, i) => (
+            <StaggerItem key={w.title} className="bg-surface p-6 sm:p-8">
+              <span className="flex h-11 w-11 items-center justify-center rounded-md bg-gold-soft text-navy-deep">
+                {(() => {
+                  const Icon = WHY_ICONS[i % WHY_ICONS.length];
+                  return <Icon className="h-6 w-6" />;
+                })()}
+              </span>
+              <h3 className="mt-5 font-display text-xl font-bold tracking-tight sm:text-2xl">
+                {w.title}
+              </h3>
+              <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">{w.body}</p>
+            </StaggerItem>
+          ))}
+        </StaggerList>
+      </section>
+
+      {/* News: one lead story and a short column (hidden until something is published) */}
       {latestNews && latestNews.length > 0 && (
-        <section className="container-wide py-24 md:py-32">
-          <div className="flex items-end justify-between gap-6 border-b border-border pb-6">
-            <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-accent">Latest</p>
-              <h2 className="mt-3 font-display text-3xl md:text-4xl">From our newsroom</h2>
-            </div>
-            <Link to="/news" className="inline-flex items-center gap-1 text-sm font-medium text-foreground hover:text-accent">
-              All stories <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-          <div className="mt-10 grid gap-10 md:grid-cols-3">
-            {latestNews.map((n) => (
-              <Link key={n.id} to="/news/$slug" params={{ slug: n.slug }} className="group block">
-                {n.cover_image_url ? (
-                  <div className="overflow-hidden rounded-xl bg-muted aspect-[4/3]">
-                    <img src={n.cover_image_url} alt="" className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" loading="lazy" />
-                  </div>
-                ) : (
-                  <div className="aspect-[4/3] rounded-xl marquee-gold" />
-                )}
-                <p className="mt-4 text-xs uppercase tracking-widest text-muted-foreground">
-                  {new Date(n.published_at).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}
-                </p>
-                <h3 className="mt-2 font-display text-xl leading-snug group-hover:text-navy">{n.title}</h3>
-                {n.excerpt && <p className="mt-2 text-sm text-muted-foreground line-clamp-2">{n.excerpt}</p>}
-              </Link>
-            ))}
+        <section className="container-wide pt-12 lg:pt-16">
+          <SectionHead title="From our newsroom" action={{ to: "/news", label: "All stories" }} />
+          <div className="mt-8 grid gap-5 lg:grid-cols-[7fr_5fr]">
+            <Reveal>
+              <NewsCard post={latestNews[0]} lead />
+            </Reveal>
+            {latestNews.length > 1 && (
+              <div className="grid gap-5 lg:auto-rows-fr">
+                {latestNews.slice(1).map((n) => (
+                  <Reveal key={n.id}>
+                    <NewsCard post={n} compact />
+                  </Reveal>
+                ))}
+              </div>
+            )}
           </div>
         </section>
       )}
 
-      <Testimonials />
+      {/* Purpose: navy panel with the mission set large, photograph in its own column */}
+      {(c["about.mission"] || c["about.vision"]) && (
+        <section className="mt-12 overflow-hidden bg-navy-deep text-white lg:mt-16">
+          <div className="grid lg:grid-cols-2">
+            <div className="px-[1.125rem] py-12 sm:px-6 lg:py-20 lg:pl-[max(2.5rem,calc((100vw-84rem)/2+2.5rem))] lg:pr-14">
+              {c["about.mission"] && (
+                <>
+                  <p className="label-mono text-gold">Our mission</p>
+                  <p className="mt-4 font-display text-[clamp(1.6rem,2.8vw,2.6rem)] font-bold leading-[1.12] tracking-[-0.03em]">
+                    {c["about.mission"]}
+                  </p>
+                </>
+              )}
+              {c["about.vision"] && (
+                <>
+                  <p className="label-mono mt-12 text-gold">Our vision</p>
+                  <p className="mt-4 max-w-2xl text-lg leading-relaxed text-white/85">
+                    {c["about.vision"]}
+                  </p>
+                </>
+              )}
+              <Link
+                to="/about"
+                className="press mt-10 inline-flex h-11 items-center gap-2 rounded-md border border-white/40 px-5 font-display text-sm font-semibold hover:bg-white/10"
+              >
+                About Bomas <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </div>
+            <div className="relative hidden min-h-[28rem] lg:block">
+              <img
+                src={missionImg}
+                alt=""
+                width={1400}
+                height={900}
+                loading="lazy"
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            </div>
+          </div>
+        </section>
+      )}
 
-      <section className="container-wide py-24">
-        <div className="rounded-3xl bg-navy-deep px-8 py-16 md:p-20 text-center text-white relative overflow-hidden">
-          <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-accent/20 blur-3xl" />
-          <div className="absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-accent/10 blur-3xl" />
-          <p className="relative text-xs uppercase tracking-[0.32em] text-accent">Join the Bomas family</p>
-          <h2 className="relative mt-4 font-display text-4xl md:text-5xl">Bring your child to a school that sees them.</h2>
-          <p className="relative mx-auto mt-6 max-w-xl text-white/70">Book a campus visit, meet our teachers, and learn how Bomas Academy nurtures every learner.</p>
-          <Link to="/admissions" className="relative mt-8 inline-flex items-center gap-2 rounded-full bg-accent px-7 py-3.5 text-sm font-semibold text-accent-foreground hover:shadow-xl hover:shadow-accent/40 transition-shadow">
-            Start admissions <ArrowRight className="h-4 w-4" />
-          </Link>
+      {/* Values: giant letters on gold */}
+      <section className="bg-gold text-navy-deep">
+        <div className="container-wide py-10 lg:py-14">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <h2 className="section-title">{c["home.values.title"]}</h2>
+            <Link
+              to="/about"
+              hash="values"
+              className="press inline-flex h-10 items-center gap-2 rounded-md border border-navy-deep/40 px-3.5 font-display text-sm font-semibold hover:bg-navy-deep hover:text-white"
+            >
+              Read the values <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          </div>
+          <BomasLetters values={values} />
         </div>
       </section>
 
-      <ContactPreview />
+      {/* Campus: photo tiles for the first three, the rest as a quiet list */}
+      {facilities.length > 0 && (
+        <section className="container-wide py-12 lg:py-20">
+          <SectionHead
+            title={c["facilities.title"]}
+            action={{ to: "/facilities", label: "All facilities" }}
+          />
+          <StaggerList as="div" className="mt-8 grid gap-4 md:grid-cols-3">
+            {facilityTiles.map((f) => (
+              <StaggerItem key={f.title} as="div">
+                <PhotoTile
+                  to="/facilities"
+                  title={f.title}
+                  note={f.body}
+                  image={facilityImage(f.title) ?? classroomImg}
+                  aspect="aspect-[16/10] md:aspect-[4/5]"
+                />
+              </StaggerItem>
+            ))}
+          </StaggerList>
+          {facilityRest.length > 0 && (
+            <ul className="mt-5 flex flex-wrap gap-2">
+              {facilityRest.map((f) => (
+                <li
+                  key={f.title}
+                  className="flex items-center gap-2 rounded-md border bg-surface py-2 pl-2.5 pr-3.5 font-display text-sm font-semibold transition-colors hover:border-navy/40 hover:bg-muted"
+                >
+                  {(() => {
+                    const Icon = facilityIcon(f.title);
+                    return <Icon className="h-5 w-5 text-navy" />;
+                  })()}
+                  {f.title}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {/* Gallery: one large photograph with four around it, the last tile leading on */}
+      {gallery && gallery.length > 0 && (
+        <section className="container-wide pb-12 lg:pb-20">
+          <SectionHead
+            title={c["home.gallery.title"]}
+            action={{ to: "/gallery", label: "View gallery" }}
+          />
+          <StaggerList
+            as="div"
+            className="mt-8 grid grid-cols-2 gap-3 lg:h-[30rem] lg:grid-cols-4 lg:grid-rows-2 lg:gap-4"
+          >
+            {gallery.map((img, i) => {
+              const isLast = i === gallery.length - 1 && gallery.length > 1;
+              return (
+                <StaggerItem
+                  key={img.id}
+                  as="div"
+                  className={i === 0 ? "col-span-2 lg:row-span-2" : ""}
+                >
+                  <Link
+                    to="/gallery"
+                    aria-label={isLast ? "See all photos in the gallery" : "Open the gallery"}
+                    className={`group relative block h-full overflow-hidden rounded-lg bg-secondary ${
+                      i === 0 ? "aspect-[4/3] lg:aspect-auto" : "aspect-square lg:aspect-auto"
+                    }`}
+                  >
+                    <img
+                      src={img.image_url}
+                      alt={img.title ?? ""}
+                      loading="lazy"
+                      decoding="async"
+                      className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.05]"
+                    />
+                    {isLast && (
+                      <span className="absolute inset-0 flex flex-col items-start justify-end bg-gradient-to-t from-navy-deep/90 via-navy-deep/50 to-navy-deep/10 p-4 text-white sm:p-5">
+                        <span className="font-display text-lg font-bold leading-tight tracking-tight sm:text-xl">
+                          See all photos
+                        </span>
+                        <span className="mt-2 flex h-9 w-9 items-center justify-center rounded-md bg-gold text-navy-deep transition-transform group-hover:translate-x-0.5">
+                          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                        </span>
+                      </span>
+                    )}
+                  </Link>
+                </StaggerItem>
+              );
+            })}
+          </StaggerList>
+        </section>
+      )}
+
+      {/* Admissions: the one loud call to action */}
+      <section className="container-wide">
+        <div className="rounded-lg border-b-[6px] border-gold bg-navy-deep p-7 text-white sm:p-12 lg:p-16">
+          <MaskLines
+            lines={["Bring your child to a", "school that sees them."]}
+            className="display-xl max-w-4xl text-[clamp(2.2rem,5.6vw,4.8rem)]"
+          />
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <Link
+              to="/admissions"
+              className="press inline-flex h-12 items-center gap-2 rounded-md bg-gold px-6 font-display text-[15px] font-semibold text-navy-deep hover:-translate-y-px hover:brightness-95"
+            >
+              Start admissions <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+            <p className="max-w-sm text-sm text-white/75">
+              Book a campus visit, meet our teachers, and learn how Bomas Academy nurtures every
+              learner.
+            </p>
+          </div>
+        </div>
+
+        <ul className="mb-10 mt-4 grid gap-px overflow-clip rounded-lg border bg-border sm:grid-cols-2 lg:mb-12 lg:grid-cols-4 [&>li]:bg-surface">
+          {contact.map(({ Icon, label, value, href }) => (
+            <li key={label} className="flex gap-4 p-5">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-secondary text-navy">
+                <Icon className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <p className="label-mono text-muted-foreground">{label}</p>
+                {href ? (
+                  <a
+                    href={href}
+                    className="mt-0.5 flex min-h-11 items-center break-words font-display text-base font-semibold hover:underline"
+                  >
+                    {value}
+                    <ArrowUpRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
+                  </a>
+                ) : (
+                  <p className="mt-1 whitespace-pre-line font-display text-base font-semibold">
+                    {value}
+                  </p>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
     </>
   );
 }
