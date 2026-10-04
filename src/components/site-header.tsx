@@ -115,6 +115,8 @@ const UTILITY = [
 
 export function SiteHeader() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // Includes the #section, so a link to another part of the same page counts as a move too.
+  const locationKey = useRouterState({ select: (s) => s.location.href });
   const c = useSiteContent();
   const reduce = useReducedMotion();
   const [open, setOpen] = useState<string | null>(null);
@@ -139,7 +141,15 @@ export function SiteHeader() {
   useEffect(() => {
     setOpen(null);
     setMobile(false);
-  }, [pathname]);
+    setExpanded(null);
+  }, [locationKey]);
+
+  // Every link in the mobile menu closes it on tap, even when it leads to the page you are
+  // already on (the address does not change then, so nothing else would close it).
+  const closeMobile = useCallback(() => {
+    setMobile(false);
+    setExpanded(null);
+  }, []);
 
   // The bar compacts a little once the page is scrolled.
   useEffect(() => {
@@ -473,6 +483,7 @@ export function SiteHeader() {
                                 <Link
                                   to={it.to}
                                   hash={it.hash}
+                                  onClick={closeMobile}
                                   className="flex min-h-12 items-center justify-between py-2 pl-3 text-[15px] text-white/85"
                                 >
                                   {it.label}
@@ -503,6 +514,7 @@ export function SiteHeader() {
                   >
                     <Link
                       to={p.to}
+                      onClick={closeMobile}
                       className="flex min-h-14 items-center font-display text-xl font-semibold"
                     >
                       {p.label}
@@ -514,6 +526,7 @@ export function SiteHeader() {
             <div className="container-wide sticky bottom-0 border-t border-white/10 bg-navy-deep py-4">
               <Link
                 to="/admissions"
+                onClick={closeMobile}
                 className="press flex h-12 w-full items-center justify-center gap-2 rounded-md bg-gold font-display text-[15px] font-semibold text-navy-deep"
               >
                 Apply now
