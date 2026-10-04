@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { sendEnquiry } from "@/lib/api/contact.functions";
 
 export const Route = createFileRoute("/contact")({
   head: () => ({
@@ -40,7 +41,7 @@ export const Route = createFileRoute("/contact")({
 
 function ContactPage() {
   const c = useSiteContent();
-  const [sent, setSent] = useState(false);
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const socials = [
     { Icon: Facebook, href: c["contact.facebook"], label: "Facebook" },
     { Icon: Instagram, href: c["contact.instagram"], label: "Instagram" },
@@ -120,19 +121,31 @@ function ContactPage() {
         <Reveal direction="left">
           <form
             className="rounded-lg bg-navy-deep p-6 text-white sm:p-10"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-              const data = new FormData(e.currentTarget);
-              const body = encodeURIComponent(
-                `Name: ${data.get("name")}\nPhone: ${data.get("phone")}\n\n${data.get("message")}`,
-              );
-              setSent(true);
-              window.location.href = `mailto:${c["contact.email"]}?subject=Website enquiry&body=${body}`;
+              const form = e.currentTarget;
+              const data = new FormData(form);
+              setStatus("sending");
+              try {
+                await sendEnquiry({
+                  data: {
+                    name: String(data.get("name") ?? ""),
+                    email: String(data.get("email") ?? ""),
+                    phone: String(data.get("phone") ?? ""),
+                    message: String(data.get("message") ?? ""),
+                    website: String(data.get("website") ?? ""),
+                  },
+                });
+                form.reset();
+                setStatus("sent");
+              } catch {
+                setStatus("error");
+              }
             }}
           >
             <h2 className="display-xl text-[clamp(1.8rem,3.4vw,2.8rem)]">Send us a message</h2>
             <p className="mt-2 text-sm text-white/70">
-              This opens your email app with the message ready to send.
+              We read every message and usually reply within one working day.
             </p>
             <div className="mt-7 grid gap-5">
               <div className="grid gap-2">
@@ -144,6 +157,19 @@ function ContactPage() {
                   name="name"
                   required
                   autoComplete="name"
+                  className="border-white/25 bg-white text-ink"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="email" className="text-white">
+                  Your email
+                </Label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                  autoComplete="email"
                   className="border-white/25 bg-white text-ink"
                 />
               </div>
@@ -171,12 +197,29 @@ function ContactPage() {
                   className="border-white/25 bg-white text-ink"
                 />
               </div>
-              <Button type="submit" variant="gold" size="lg" className="w-full sm:w-fit">
-                <Send aria-hidden="true" /> Send message
+              {/* Honeypot for spam bots, hidden from people and screen readers */}
+              <div aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 overflow-hidden">
+                <label htmlFor="website">Website</label>
+                <input id="website" name="website" type="text" tabIndex={-1} autoComplete="off" />
+              </div>
+              <Button
+                type="submit"
+                variant="gold"
+                size="lg"
+                className="w-full sm:w-fit"
+                disabled={status === "sending"}
+              >
+                <Send aria-hidden="true" /> {status === "sending" ? "Sending..." : "Send message"}
               </Button>
-              {sent && (
+              {status === "sent" && (
                 <p role="status" className="rounded-md bg-white/10 px-3 py-2 text-sm">
-                  Opening your email app. If nothing opens, write to {c["contact.email"]}.
+                  Thank you. Your message has been sent and we will be in touch soon.
+                </p>
+              )}
+              {status === "error" && (
+                <p role="alert" className="rounded-md bg-red-500/20 px-3 py-2 text-sm">
+                  Sorry, your message could not be sent. Please try again or write to{" "}
+                  {c["contact.email"]}.
                 </p>
               )}
             </div>
