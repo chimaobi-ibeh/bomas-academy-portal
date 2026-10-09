@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowRight, ChevronDown, Mail, Phone } from "@/components/icons";
+import { ArrowRight, ChevronDown, ExternalLink, Mail, Phone } from "@/components/icons";
 import logoAsset from "@/assets/bomas-logo.jpg";
 import missionImg from "@/assets/about-mission.jpg";
 import academicImg from "@/assets/academic-primary.webp";
@@ -9,6 +9,8 @@ import admissionsImg from "@/assets/admissions-featured.jpg";
 import playgroundImg from "@/assets/playground.jpg";
 import { useSiteContent } from "@/lib/use-site-content";
 import { EASE } from "@/components/motion";
+
+const PORTAL_URL = "https://bomasacademy.myschooldomain.com";
 
 type Item = { to: string; hash?: string; label: string; note: string };
 type Group = {
@@ -334,6 +336,15 @@ export function SiteHeader() {
           </nav>
 
           <div className="flex items-center gap-2">
+            <a
+              href={PORTAL_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="press hidden h-10 items-center gap-2 rounded-md border border-white/30 px-4 font-display text-sm font-semibold text-white hover:-translate-y-px hover:bg-white/10 sm:inline-flex"
+            >
+              Portal
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
+            </a>
             <Link
               to="/admissions"
               className="press hidden h-10 items-center gap-2 rounded-md bg-gold px-4 font-display text-sm font-semibold text-navy-deep hover:-translate-y-px hover:brightness-95 sm:inline-flex"
@@ -544,7 +555,17 @@ export function SiteHeader() {
                 ))}
               </ul>
             </nav>
-            <div className="container-wide sticky bottom-0 border-t border-white/10 bg-navy-deep py-4">
+            <div className="container-wide sticky bottom-0 grid gap-2 border-t border-white/10 bg-navy-deep py-4">
+              <a
+                href={PORTAL_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={closeMobile}
+                className="press flex h-12 w-full items-center justify-center gap-2 rounded-md border border-white/30 font-display text-[15px] font-semibold text-white"
+              >
+                Portal
+                <ExternalLink className="h-4 w-4" aria-hidden="true" />
+              </a>
               <Link
                 to="/admissions"
                 onClick={closeMobile}
