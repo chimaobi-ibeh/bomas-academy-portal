@@ -231,6 +231,10 @@ export function ApplyWizard({ info }: { info: Info }) {
 
   async function submit() {
     setProblem(null);
+    if (!info.enabled || !info.feeKobo) {
+      setProblem("Online submission is not available yet. Please contact the admissions office to apply.");
+      return;
+    }
     const data = await validateAll();
     if (!data) return;
     const form = clean(methods.getValues());
@@ -397,7 +401,9 @@ export function ApplyWizard({ info }: { info: Info }) {
           {current.key === "review" ? (
             <Button type="submit" variant="gold" size="lg" disabled={!!busy || !info.enabled || !info.feeKobo}>
               <Lock aria-hidden="true" />
-              {busy ?? `Pay ${info.feeKobo ? formatNaira(info.feeKobo) : ""} and submit`}
+              {info.enabled && info.feeKobo
+                ? (busy ?? `Pay ${formatNaira(info.feeKobo)} and submit`)
+                : "Submission opens soon"}
             </Button>
           ) : (
             <Button type="submit" size="lg">
@@ -845,10 +851,22 @@ function ReviewStep({ info, files, onEdit }: { info: Info; files: Record<UploadK
       </>)}
       <section className="rounded-lg bg-navy-deep p-6 text-white">
         <p className="label-mono text-gold">Application fee</p>
-        <p className="mt-1 font-display text-4xl font-bold">{info.feeKobo ? formatNaira(info.feeKobo) : "-"}</p>
-        <p className="mt-3 text-sm text-white/80">
-          You will pay on a secure payment page. We never see or store your card details. {PAYMENT_DISCLAIMER}
-        </p>
+        {info.enabled && info.feeKobo ? (
+          <>
+            <p className="mt-1 font-display text-4xl font-bold">{formatNaira(info.feeKobo)}</p>
+            <p className="mt-3 text-sm text-white/80">
+              You will pay on a secure payment page. We never see or store your card details. {PAYMENT_DISCLAIMER}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="mt-1 font-display text-2xl font-bold">Online payment is opening soon</p>
+            <p className="mt-3 text-sm text-white/80">
+              You cannot submit this application online yet. To apply now, please contact the admissions office.{" "}
+              {PAYMENT_DISCLAIMER}
+            </p>
+          </>
+        )}
       </section>
     </>
   );

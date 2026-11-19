@@ -62,22 +62,25 @@ function ApplyPage() {
               </Link>
             </div>
           )}
-          {info.enabled ? (
-            <ApplyWizard info={info} />
-          ) : (
-            <div className="rounded-lg border bg-surface p-6 sm:p-8">
-              <h2 className="section-title">Online applications are opening soon</h2>
-              <p className="mt-3 text-muted-foreground">
-                The online application is not open yet. In the meantime, please contact the admissions office or visit
-                the school to collect the forms.
+          {!info.enabled && (
+            <div className="mb-8 rounded-lg border border-gold bg-gold-soft p-5 text-navy-deep">
+              <p className="font-display font-semibold">Online submission is opening soon.</p>
+              <p className="mt-1 text-sm">
+                You can fill in and review the application now, but submitting and paying the application fee online
+                is not available yet. Your answers are kept only in this browser tab. To apply today, please contact
+                the admissions office.
               </p>
               {c["admissions.phone"] && (
-                <a href={`tel:${c["admissions.phone"]}`} className="mt-5 inline-flex min-h-11 items-center gap-2 font-display text-2xl font-bold text-navy-deep">
-                  <Phone className="h-5 w-5" aria-hidden="true" /> {c["admissions.phone"]}
+                <a
+                  href={`tel:${c["admissions.phone"]}`}
+                  className="mt-2 inline-flex min-h-11 items-center gap-2 font-display font-bold"
+                >
+                  <Phone className="h-4 w-4" aria-hidden="true" /> {c["admissions.phone"]}
                 </a>
               )}
             </div>
           )}
+          <ApplyWizard info={info} />
         </div>
         <aside className="h-fit rounded-lg bg-secondary p-6 text-[15px] lg:sticky lg:top-28">
           <h2 className="font-display text-lg font-bold">What you will need</h2>
