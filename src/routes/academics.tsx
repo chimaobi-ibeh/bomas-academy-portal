@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { pageHead } from "@/lib/seo";
 import { ArrowRight } from "@/components/icons";
 import { useSiteContent } from "@/lib/use-site-content";
 import { PageBanner, SubNav } from "@/components/page-parts";
@@ -9,22 +10,26 @@ import academicPrimaryImg from "@/assets/academic-primary.webp";
 import academicSecondaryImg from "@/assets/academic-secondary.webp";
 
 export const Route = createFileRoute("/academics")({
-  head: () => ({
-    meta: [
-      { title: "Academics - Bomas Academy" },
-      {
-        name: "description",
-        content:
-          "From early years to senior secondary, our curriculum challenges, supports and stretches every learner.",
-      },
-      { property: "og:title", content: "Academics - Bomas Academy" },
-      {
-        property: "og:description",
-        content:
-          "From early years to senior secondary, our curriculum challenges, supports and stretches every learner.",
-      },
-    ],
-  }),
+  head: () =>
+    pageHead({
+      title: "Academics | Early Years, Primary & Secondary School in Jos | Bomas Academy",
+      description:
+        "Bomas Academy academics: Early Years (ages 2 to 5), Primary 1 to 6, and JSS & SSS secondary preparing students for WAEC, NECO and university in Jos, Plateau State.",
+      path: "/academics",
+      image: classroomImg,
+      breadcrumbs: [{ name: "Academics", path: "/academics" }],
+      jsonLd: [
+        {
+          "@type": "ItemList",
+          name: "Bomas Academy school stages",
+          itemListElement: [
+            { "@type": "ListItem", position: 1, name: "Early Years (ages 2 to 5): play-based learning, phonics and numeracy" },
+            { "@type": "ListItem", position: 2, name: "Primary School (Primary 1 to 6): literacy, numeracy, science and creative arts" },
+            { "@type": "ListItem", position: 3, name: "Secondary School (JSS and SSS): WAEC, NECO and university preparation" },
+          ],
+        },
+      ],
+    }),
   component: AcademicsPage,
 });
 

@@ -1,16 +1,79 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { pageHead } from "@/lib/seo";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft } from "@/components/icons";
 import { formatDate } from "@/components/page-parts";
 import { NewsCard } from "@/components/news-card";
 import { ReadingProgress, Rise } from "@/components/motion";
 
+async function fetchPost(slug: string) {
+  const { data, error } = await supabase
+    .from("news_posts")
+    .select("*")
+    .eq("slug", slug)
+    .eq("published", true)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 export const Route = createFileRoute("/news/$slug")({
-  head: () => ({
-    meta: [{ title: "Story - Bomas Academy" }],
-  }),
+  // Loaded on the server so search engines and AI crawlers receive the full story.
+  loader: async ({ params }) => {
+    let post: Awaited<ReturnType<typeof fetchPost>> | undefined;
+    try {
+      post = await fetchPost(params.slug);
+    } catch {
+      return { post: undefined }; // database unreachable: the page fetches again in the browser
+    }
+    if (!post) throw notFound();
+    return { post };
+  },
+  head: ({ loaderData, params }) => {
+    const post = loaderData?.post;
+    const path = `/news/${post?.slug ?? params.slug}`;
+    if (!post) {
+      return pageHead({ title: "News | Bomas Academy", description: "News from Bomas Academy, Jos.", path });
+    }
+    const description =
+      (post.excerpt || post.body || "")
+        .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 158) || "News from Bomas Academy, Jos.";
+    return pageHead({
+      title: `${post.title} | Bomas Academy News`,
+      description,
+      path,
+      image: post.cover_image_url,
+      imageAlt: post.title,
+      type: "article",
+      breadcrumbs: [
+        { name: "News", path: "/news" },
+        { name: post.title, path },
+      ],
+      extraMeta: [
+        { property: "article:published_time", content: post.published_at },
+        { property: "article:modified_time", content: post.updated_at },
+      ],
+      jsonLd: [
+        {
+          "@type": "NewsArticle",
+          "@id": `https://www.bomasacademy.org${path}#article`,
+          headline: post.title.slice(0, 110),
+          description,
+          image: post.cover_image_url ? [post.cover_image_url] : undefined,
+          datePublished: post.published_at,
+          dateModified: post.updated_at,
+          mainEntityOfPage: `https://www.bomasacademy.org${path}`,
+          author: { "@type": "Organization", name: "Bomas Academy", url: "https://www.bomasacademy.org" },
+          publisher: { "@id": "https://www.bomasacademy.org/#school" },
+          inLanguage: "en-NG",
+        },
+      ],
+    });
+  },
   component: NewsDetail,
   notFoundComponent: () => (
     <div className="container-wide py-28 text-center">
@@ -28,18 +91,12 @@ export const Route = createFileRoute("/news/$slug")({
 
 function NewsDetail() {
   const { slug } = Route.useParams();
+  const loaded = Route.useLoaderData();
   const { data, isLoading } = useQuery({
     queryKey: ["news_post", slug],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("news_posts")
-        .select("*")
-        .eq("slug", slug)
-        .eq("published", true)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => fetchPost(slug),
+    initialData: loaded.post,
+    staleTime: 30_000,
   });
 
   const { data: more } = useQuery({
@@ -55,17 +112,6 @@ function NewsDetail() {
       return data ?? [];
     },
   });
-
-  // The tab and share title follow the story once it has loaded.
-  const storyTitle = data?.title?.trim();
-  useEffect(() => {
-    if (!storyTitle) return;
-    const previous = document.title;
-    document.title = `${storyTitle} - Bomas Academy`;
-    return () => {
-      document.title = previous;
-    };
-  }, [storyTitle]);
 
   if (isLoading) {
     return (
@@ -90,13 +136,15 @@ function NewsDetail() {
           <ArrowLeft className="h-4 w-4" aria-hidden="true" /> All stories
         </Link>
         <Rise>
-          <p className="label-mono mt-6 text-muted-foreground">{formatDate(data.published_at)}</p>
+          <p className="label-mono mt-6 text-muted-foreground">
+            <time dateTime={data.published_at}>{formatDate(data.published_at)}</time>
+          </p>
           <h1 className="page-title mt-3">{data.title}</h1>
         </Rise>
         {data.cover_image_url && (
           <img
             src={data.cover_image_url}
-            alt=""
+            alt={data.title}
             width={1200}
             height={675}
             className="mt-8 aspect-[16/9] w-full rounded-lg object-cover"

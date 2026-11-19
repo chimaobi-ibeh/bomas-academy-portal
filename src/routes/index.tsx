@@ -37,26 +37,22 @@ import classroomImg from "@/assets/classroom.jpg";
 import academicEarlyImg from "@/assets/academic-early.webp";
 import academicPrimaryImg from "@/assets/academic-primary.webp";
 import academicSecondaryImg from "@/assets/academic-secondary.webp";
+import { pageHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/")({
-  head: () => ({
-    // The first hero photograph is the largest thing on screen, so it is asked for at once.
-    links: [{ rel: "preload", as: "image", href: academicEarlyImg, fetchPriority: "high" }],
-    meta: [
-      { title: "Bomas Academy - Jos, Plateau State" },
-      {
-        name: "description",
-        content:
-          "Bomas Academy is a nurturing learning community in Jos shaping confident, curious and compassionate young minds from early years through senior secondary.",
-      },
-      { property: "og:title", content: "Bomas Academy - Jos, Plateau State" },
-      {
-        property: "og:description",
-        content:
-          "A nurturing learning community in Jos shaping confident, curious and compassionate young minds.",
-      },
-    ],
-  }),
+  head: () => {
+    const seo = pageHead({
+      title: "Bomas Academy | Private Nursery, Primary & Secondary School in Jos",
+      description:
+        "Bomas Academy is a private nursery, primary and secondary school in G.R.A, Jos, Plateau State. Early Years to SSS, WAEC & NECO preparation. Apply online.",
+      path: "/",
+    });
+    return {
+      ...seo,
+      // The first hero photograph is the largest thing on screen, so it is asked for at once.
+      links: [{ rel: "preload", as: "image", href: academicEarlyImg, fetchPriority: "high" }, ...seo.links],
+    };
+  },
   loader: async () => {
     const [news, gallery] = await Promise.all([
       orNothing(fetchHomeNews),

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { pageHead } from "@/lib/seo";
 import {
   Clock,
   Shirt,
@@ -17,22 +18,15 @@ import schoolLifeBannerImg from "@/assets/school-life-banner.jpg";
 import schoolLifeHomeworkImg from "@/assets/school-life-homework.jpg";
 
 export const Route = createFileRoute("/school-life")({
-  head: () => ({
-    meta: [
-      { title: "School Life - Bomas Academy" },
-      {
-        name: "description",
-        content:
-          "Campus life, the home-school partnership, homework, health & safety, and our home/school agreement.",
-      },
-      { property: "og:title", content: "School Life - Bomas Academy" },
-      {
-        property: "og:description",
-        content:
-          "Campus life, the home-school partnership, homework, health & safety, and our home/school agreement.",
-      },
-    ],
-  }),
+  head: () =>
+    pageHead({
+      title: "School Life at Bomas Academy Jos | School Day, Uniform & Homework",
+      description:
+        "What to expect at Bomas Academy, Jos: school hours (7:30 AM to 2:30 PM), uniform, homework guide by class, the open-door home-school partnership, health, safety and inclusion.",
+      path: "/school-life",
+      image: schoolLifeBannerImg,
+      breadcrumbs: [{ name: "School Life", path: "/school-life" }],
+    }),
   component: SchoolLifePage,
 });
 

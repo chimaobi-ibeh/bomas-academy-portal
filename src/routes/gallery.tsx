@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { pageHead } from "@/lib/seo";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -9,22 +10,30 @@ import { EmptyState, PaperHeader } from "@/components/page-parts";
 import { EASE, StaggerItem, StaggerList } from "@/components/motion";
 
 export const Route = createFileRoute("/gallery")({
-  head: () => ({
-    meta: [
-      { title: "Gallery - Bomas Academy" },
-      {
-        name: "description",
-        content:
-          "Moments from life at Bomas Academy, including classrooms, events, sports and more.",
-      },
-      { property: "og:title", content: "Gallery - Bomas Academy" },
-      {
-        property: "og:description",
-        content:
-          "Moments from life at Bomas Academy, including classrooms, events, sports and more.",
-      },
-    ],
-  }),
+  head: ({ loaderData }) => {
+    const images = loaderData ?? [];
+    return pageHead({
+      title: "Photo Gallery | Life at Bomas Academy, Jos",
+      description:
+        "Photos from Bomas Academy in Jos, Plateau State: classrooms, school events, sports, the arts and everyday school life.",
+      path: "/gallery",
+      image: images[0]?.image_url,
+      breadcrumbs: [{ name: "Gallery", path: "/gallery" }],
+      jsonLd: images.length
+        ? [
+            {
+              "@type": "ImageGallery",
+              name: "Life at Bomas Academy",
+              associatedMedia: images.slice(0, 50).map((img) => ({
+                "@type": "ImageObject",
+                contentUrl: img.image_url,
+                name: img.title || "Bomas Academy school life",
+              })),
+            },
+          ]
+        : [],
+    });
+  },
   loader: () => orNothing(fetchGallery),
   component: GalleryPage,
 });

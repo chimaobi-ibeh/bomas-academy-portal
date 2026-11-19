@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { pageHead } from "@/lib/seo";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, VALUE_ICONS } from "@/components/icons";
@@ -13,22 +14,15 @@ import aboutMissionImg from "@/assets/about-mission.jpg";
 import aboutAimsImg from "@/assets/about-aims.jpg";
 
 export const Route = createFileRoute("/about")({
-  head: () => ({
-    meta: [
-      { title: "About - Bomas Academy" },
-      {
-        name: "description",
-        content:
-          "The story behind Bomas Academy, and the mission and vision guiding our school for the children of Jos.",
-      },
-      { property: "og:title", content: "About - Bomas Academy" },
-      {
-        property: "og:description",
-        content:
-          "The story behind Bomas Academy, and the mission and vision guiding our school for the children of Jos.",
-      },
-    ],
-  }),
+  head: () =>
+    pageHead({
+      title: "About Bomas Academy | Mission, Vision & BOMAS Values | Jos",
+      description:
+        "Learn about Bomas Academy in Jos, Plateau State: our story, mission and vision, and the BOMAS core values of Bravery, Opportunity, Mastery, Authenticity and Service.",
+      path: "/about",
+      image: aboutSlide1,
+      breadcrumbs: [{ name: "About", path: "/about" }],
+    }),
   component: AboutPage,
 });
 

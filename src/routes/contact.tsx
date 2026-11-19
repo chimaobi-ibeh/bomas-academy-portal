@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { pageHead } from "@/lib/seo";
 import { useState } from "react";
 import {
   ArrowUpRight,
@@ -20,22 +21,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { sendEnquiry } from "@/lib/api/contact.functions";
 
 export const Route = createFileRoute("/contact")({
-  head: () => ({
-    meta: [
-      { title: "Contact - Bomas Academy" },
-      {
-        name: "description",
-        content:
-          "Get in touch with the Bomas Academy admissions and main office in Jos, Plateau State.",
-      },
-      { property: "og:title", content: "Contact - Bomas Academy" },
-      {
-        property: "og:description",
-        content:
-          "Get in touch with the Bomas Academy admissions and main office in Jos, Plateau State.",
-      },
-    ],
-  }),
+  head: () =>
+    pageHead({
+      title: "Contact Bomas Academy | Address, Phone & Directions | G.R.A, Jos",
+      description:
+        "Contact Bomas Academy at No 10 Metropolitan Crescent, G.R.A, Jos, Plateau State. Call 0803 605 8313, email bomasacademy@gmail.com, or send us a message. Mon to Fri, 7:30am to 4pm.",
+      path: "/contact",
+      breadcrumbs: [{ name: "Contact", path: "/contact" }],
+      jsonLd: [
+        {
+          "@type": "ContactPage",
+          "@id": "https://www.bomasacademy.org/contact#contactpage",
+          url: "https://www.bomasacademy.org/contact",
+          about: { "@id": "https://www.bomasacademy.org/#school" },
+        },
+      ],
+    }),
   component: ContactPage,
 });
 

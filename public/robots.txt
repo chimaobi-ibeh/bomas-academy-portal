@@ -1,4 +1,28 @@
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /auth
+Disallow: /api/
+Disallow: /admissions/application
+Disallow: /admissions/office
+
+# AI search and assistant crawlers are welcome, so Bomas Academy can be cited in AI answers.
+User-agent: GPTBot
+User-agent: OAI-SearchBot
+User-agent: ChatGPT-User
+User-agent: ClaudeBot
+User-agent: Claude-SearchBot
+User-agent: Claude-User
+User-agent: PerplexityBot
+User-agent: Perplexity-User
+User-agent: Google-Extended
+User-agent: Applebot-Extended
+User-agent: Bingbot
+Allow: /
+Disallow: /admin
+Disallow: /auth
+Disallow: /api/
+Disallow: /admissions/application
+Disallow: /admissions/office
 
 Sitemap: https://www.bomasacademy.org/sitemap.xml

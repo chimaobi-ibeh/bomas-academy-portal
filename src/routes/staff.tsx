@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { pageHead } from "@/lib/seo";
 import { useQuery } from "@tanstack/react-query";
 import { Users } from "@/components/icons";
 import { fetchStaff, orNothing } from "@/lib/data";
@@ -6,17 +7,22 @@ import { EmptyState, PaperHeader } from "@/components/page-parts";
 import { Reveal, StaggerItem, StaggerList } from "@/components/motion";
 
 export const Route = createFileRoute("/staff")({
-  head: () => ({
-    meta: [
-      { title: "Staff - Bomas Academy" },
-      { name: "description", content: "Meet the teachers and leaders shaping Bomas Academy." },
-      { property: "og:title", content: "Staff - Bomas Academy" },
-      {
-        property: "og:description",
-        content: "Meet the teachers and leaders shaping Bomas Academy.",
-      },
-    ],
-  }),
+  head: ({ loaderData }) =>
+    pageHead({
+      title: "Our Teachers & Staff | Bomas Academy, Jos",
+      description:
+        "Meet the teachers, mentors and school leaders at Bomas Academy in Jos, Plateau State, chosen for their craft and their character.",
+      path: "/staff",
+      breadcrumbs: [{ name: "Staff", path: "/staff" }],
+      jsonLd: (loaderData ?? []).map((s) => ({
+        "@type": "Person",
+        name: s.name,
+        jobTitle: s.position || undefined,
+        description: s.bio || undefined,
+        image: s.photo_url || undefined,
+        worksFor: { "@id": "https://www.bomasacademy.org/#school" },
+      })),
+    }),
   loader: () => orNothing(fetchStaff),
   component: StaffPage,
 });

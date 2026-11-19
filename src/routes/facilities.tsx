@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { pageHead } from "@/lib/seo";
 import { Building2 } from "@/components/icons";
 import { useSiteContent } from "@/lib/use-site-content";
 import { EmptyState, PageBanner } from "@/components/page-parts";
@@ -11,20 +12,15 @@ import ictImg from "@/assets/science.jpg";
 import classroomImg from "@/assets/classroom.jpg";
 
 export const Route = createFileRoute("/facilities")({
-  head: () => ({
-    meta: [
-      { title: "Facilities - Bomas Academy" },
-      {
-        name: "description",
-        content: "A safe, well-equipped campus designed to support learning, creativity and play.",
-      },
-      { property: "og:title", content: "Facilities - Bomas Academy" },
-      {
-        property: "og:description",
-        content: "A safe, well-equipped campus designed to support learning, creativity and play.",
-      },
-    ],
-  }),
+  head: () =>
+    pageHead({
+      title: "School Facilities in Jos | Library, ICT & Science Labs | Bomas Academy",
+      description:
+        "Explore the Bomas Academy campus in G.R.A, Jos: library, ICT and computer lab, science laboratory, sports field, playground, music and arts room, and dining hall.",
+      path: "/facilities",
+      image: libraryImg,
+      breadcrumbs: [{ name: "Facilities", path: "/facilities" }],
+    }),
   component: FacilitiesPage,
 });
 

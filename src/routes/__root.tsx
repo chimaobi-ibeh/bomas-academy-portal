@@ -12,6 +12,7 @@ import {
 import { useEffect, type ReactNode } from "react";
 import { MotionConfig } from "framer-motion";
 import { fetchContent, orNothing } from "@/lib/data";
+import { jsonLdScript, schoolJsonLd } from "@/lib/seo";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -114,27 +115,27 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   // The stored page text is read before anything renders, so the first HTML is already final.
   loader: async () => ({ content: await orNothing(fetchContent) }),
   staleTime: 60_000,
-  head: () => ({
+  head: ({ loaderData }) => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Bomas Academy - Jos, Plateau State" },
+      { title: "Bomas Academy | Private Nursery, Primary & Secondary School in Jos" },
       {
         name: "description",
         content:
-          "Bomas Academy is a nurturing learning community in Jos shaping confident, curious and compassionate young minds from early years through senior secondary.",
+          "Bomas Academy is a private nursery, primary and secondary school in G.R.A, Jos, Plateau State, Nigeria, nurturing confident, curious and compassionate learners from age 2 to SSS 3.",
       },
       { name: "author", content: "Bomas Academy" },
-      { property: "og:title", content: "Bomas Academy - Jos, Plateau State" },
-      {
-        property: "og:description",
-        content:
-          "A nurturing learning community in Jos shaping confident, curious and compassionate young minds.",
-      },
+      { name: "geo.region", content: "NG-PL" },
+      { name: "geo.placename", content: "Jos, Plateau State, Nigeria" },
+      { property: "og:site_name", content: "Bomas Academy" },
+      { property: "og:locale", content: "en_NG" },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
+      { name: "twitter:card", content: "summary_large_image" },
       { name: "theme-color", content: "#1f2f6b" },
     ],
+    // Site-wide facts about the school for search engines and AI assistants.
+    scripts: [jsonLdScript(schoolJsonLd(loaderData?.content))],
     links: [
       { rel: "icon", type: "image/x-icon", href: "/favicon.ico" },
       { rel: "icon", type: "image/png", sizes: "32x32", href: "/favicon-32x32.png" },
@@ -158,7 +159,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en-NG">
       <head>
         <HeadContent />
         <noscript>

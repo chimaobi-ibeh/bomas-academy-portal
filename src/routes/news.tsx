@@ -1,4 +1,5 @@
 import { createFileRoute, Link, Outlet, useChildMatches } from "@tanstack/react-router";
+import { pageHead } from "@/lib/seo";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight, Newspaper } from "@/components/icons";
 import { fetchNewsList, orNothing } from "@/lib/data";
@@ -8,17 +9,28 @@ import { Reveal, StaggerItem, StaggerList } from "@/components/motion";
 import logoAsset from "@/assets/bomas-logo.jpg";
 
 export const Route = createFileRoute("/news")({
-  head: () => ({
-    meta: [
-      { title: "News - Bomas Academy" },
-      { name: "description", content: "Announcements, events and stories from Bomas Academy." },
-      { property: "og:title", content: "News - Bomas Academy" },
-      {
-        property: "og:description",
-        content: "Announcements, events and stories from Bomas Academy.",
-      },
-    ],
-  }),
+  head: ({ loaderData }) =>
+    pageHead({
+      title: "News & Events | Bomas Academy, Jos",
+      description:
+        "The latest news, announcements, events and stories from Bomas Academy, a nursery, primary and secondary school in Jos, Plateau State.",
+      path: "/news",
+      breadcrumbs: [{ name: "News", path: "/news" }],
+      jsonLd: loaderData?.length
+        ? [
+            {
+              "@type": "ItemList",
+              name: "Bomas Academy news",
+              itemListElement: loaderData.slice(0, 30).map((p, i) => ({
+                "@type": "ListItem",
+                position: i + 1,
+                url: `https://www.bomasacademy.org/news/${p.slug}`,
+                name: p.title,
+              })),
+            },
+          ]
+        : [],
+    }),
   loader: () => orNothing(fetchNewsList),
   component: NewsRoute,
 });

@@ -1,24 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { pageHead } from "@/lib/seo";
 import { ArrowDownToLine, FileText } from "@/components/icons";
 import { useSiteContent } from "@/lib/use-site-content";
 import { EmptyState, PaperHeader } from "@/components/page-parts";
 import { StaggerItem, StaggerList } from "@/components/motion";
 
 export const Route = createFileRoute("/downloads")({
-  head: () => ({
-    meta: [
-      { title: "Downloads - Bomas Academy" },
-      {
-        name: "description",
-        content: "Forms, prospectuses and policy documents for Bomas Academy families.",
-      },
-      { property: "og:title", content: "Downloads - Bomas Academy" },
-      {
-        property: "og:description",
-        content: "Forms, prospectuses and policy documents for Bomas Academy families.",
-      },
-    ],
-  }),
+  head: () =>
+    pageHead({
+      title: "Downloads | Admission Forms, Prospectus & Policies | Bomas Academy",
+      description:
+        "Download Bomas Academy admission forms, the school prospectus and policy documents for families in Jos, Plateau State.",
+      path: "/downloads",
+      breadcrumbs: [{ name: "Downloads", path: "/downloads" }],
+    }),
   component: DownloadsPage,
 });
 
