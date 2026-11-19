@@ -14,6 +14,17 @@ export default defineConfig({
   },
   nitro: {
     preset: "vercel",
+    // Daily admissions check (06:00 WAT): confirms payments whose confirmation never arrived,
+    // retries unsent emails and deletes unpaid applications after 30 days. Hobby plans allow
+    // one run a day. Vercel sends "Authorization: Bearer $CRON_SECRET".
+    // (Nitro supports this option; the config wrapper's types do not list it.)
+    ...({
+      vercel: {
+        config: {
+          crons: [{ path: "/api/admissions/reconcile", schedule: "0 5 * * *" }],
+        },
+      },
+    } as Record<string, unknown>),
     output: {
       dir: ".vercel/output",
       serverDir: ".vercel/output/functions/__server.func",

@@ -19,11 +19,18 @@ import { Route as ContactRouteImport } from './routes/contact'
 import { Route as DownloadsRouteImport } from './routes/downloads'
 import { Route as FacilitiesRouteImport } from './routes/facilities'
 import { Route as GalleryRouteImport } from './routes/gallery'
+import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as NewsRouteImport } from './routes/news'
 import { Route as SchoolLifeRouteImport } from './routes/school-life'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as StaffRouteImport } from './routes/staff'
+import { Route as AdmissionsApplicationRouteImport } from './routes/admissions_.application'
+import { Route as AdmissionsApplyRouteImport } from './routes/admissions_.apply'
+import { Route as AdmissionsOfficeRouteImport } from './routes/admissions_.office'
 import { Route as NewsSlugRouteImport } from './routes/news.$slug'
+import { Route as ApiAdmissionsDocumentsRouteImport } from './routes/api/admissions/documents'
+import { Route as ApiAdmissionsReconcileRouteImport } from './routes/api/admissions/reconcile'
+import { Route as ApiPaymentsPaystackWebhookRouteImport } from './routes/api/payments/paystack-webhook'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -75,6 +82,11 @@ const GalleryRoute = GalleryRouteImport.update({
   path: '/gallery',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
+  id: '/llms.txt',
+  path: '/llms.txt',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NewsRoute = NewsRouteImport.update({
   id: '/news',
   path: '/news',
@@ -95,11 +107,42 @@ const StaffRoute = StaffRouteImport.update({
   path: '/staff',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdmissionsApplicationRoute = AdmissionsApplicationRouteImport.update({
+  id: '/admissions_/application',
+  path: '/admissions/application',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdmissionsApplyRoute = AdmissionsApplyRouteImport.update({
+  id: '/admissions_/apply',
+  path: '/admissions/apply',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdmissionsOfficeRoute = AdmissionsOfficeRouteImport.update({
+  id: '/admissions_/office',
+  path: '/admissions/office',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NewsSlugRoute = NewsSlugRouteImport.update({
   id: '/$slug',
   path: '/$slug',
   getParentRoute: () => NewsRoute,
 } as any)
+const ApiAdmissionsDocumentsRoute = ApiAdmissionsDocumentsRouteImport.update({
+  id: '/api/admissions/documents',
+  path: '/api/admissions/documents',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdmissionsReconcileRoute = ApiAdmissionsReconcileRouteImport.update({
+  id: '/api/admissions/reconcile',
+  path: '/api/admissions/reconcile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPaymentsPaystackWebhookRoute =
+  ApiPaymentsPaystackWebhookRouteImport.update({
+    id: '/api/payments/paystack-webhook',
+    path: '/api/payments/paystack-webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -112,11 +155,18 @@ export interface FileRoutesByFullPath {
   '/downloads': typeof DownloadsRoute
   '/facilities': typeof FacilitiesRoute
   '/gallery': typeof GalleryRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/news': typeof NewsRouteWithChildren
   '/school-life': typeof SchoolLifeRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/staff': typeof StaffRoute
+  '/admissions/application': typeof AdmissionsApplicationRoute
+  '/admissions/apply': typeof AdmissionsApplyRoute
+  '/admissions/office': typeof AdmissionsOfficeRoute
   '/news/$slug': typeof NewsSlugRoute
+  '/api/admissions/documents': typeof ApiAdmissionsDocumentsRoute
+  '/api/admissions/reconcile': typeof ApiAdmissionsReconcileRoute
+  '/api/payments/paystack-webhook': typeof ApiPaymentsPaystackWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -129,11 +179,18 @@ export interface FileRoutesByTo {
   '/downloads': typeof DownloadsRoute
   '/facilities': typeof FacilitiesRoute
   '/gallery': typeof GalleryRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/news': typeof NewsRouteWithChildren
   '/school-life': typeof SchoolLifeRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/staff': typeof StaffRoute
+  '/admissions/application': typeof AdmissionsApplicationRoute
+  '/admissions/apply': typeof AdmissionsApplyRoute
+  '/admissions/office': typeof AdmissionsOfficeRoute
   '/news/$slug': typeof NewsSlugRoute
+  '/api/admissions/documents': typeof ApiAdmissionsDocumentsRoute
+  '/api/admissions/reconcile': typeof ApiAdmissionsReconcileRoute
+  '/api/payments/paystack-webhook': typeof ApiPaymentsPaystackWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -147,11 +204,18 @@ export interface FileRoutesById {
   '/downloads': typeof DownloadsRoute
   '/facilities': typeof FacilitiesRoute
   '/gallery': typeof GalleryRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/news': typeof NewsRouteWithChildren
   '/school-life': typeof SchoolLifeRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/staff': typeof StaffRoute
+  '/admissions_/application': typeof AdmissionsApplicationRoute
+  '/admissions_/apply': typeof AdmissionsApplyRoute
+  '/admissions_/office': typeof AdmissionsOfficeRoute
   '/news/$slug': typeof NewsSlugRoute
+  '/api/admissions/documents': typeof ApiAdmissionsDocumentsRoute
+  '/api/admissions/reconcile': typeof ApiAdmissionsReconcileRoute
+  '/api/payments/paystack-webhook': typeof ApiPaymentsPaystackWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -166,11 +230,18 @@ export interface FileRouteTypes {
     | '/downloads'
     | '/facilities'
     | '/gallery'
+    | '/llms.txt'
     | '/news'
     | '/school-life'
     | '/sitemap.xml'
     | '/staff'
+    | '/admissions/application'
+    | '/admissions/apply'
+    | '/admissions/office'
     | '/news/$slug'
+    | '/api/admissions/documents'
+    | '/api/admissions/reconcile'
+    | '/api/payments/paystack-webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -183,11 +254,18 @@ export interface FileRouteTypes {
     | '/downloads'
     | '/facilities'
     | '/gallery'
+    | '/llms.txt'
     | '/news'
     | '/school-life'
     | '/sitemap.xml'
     | '/staff'
+    | '/admissions/application'
+    | '/admissions/apply'
+    | '/admissions/office'
     | '/news/$slug'
+    | '/api/admissions/documents'
+    | '/api/admissions/reconcile'
+    | '/api/payments/paystack-webhook'
   id:
     | '__root__'
     | '/'
@@ -200,11 +278,18 @@ export interface FileRouteTypes {
     | '/downloads'
     | '/facilities'
     | '/gallery'
+    | '/llms.txt'
     | '/news'
     | '/school-life'
     | '/sitemap.xml'
     | '/staff'
+    | '/admissions_/application'
+    | '/admissions_/apply'
+    | '/admissions_/office'
     | '/news/$slug'
+    | '/api/admissions/documents'
+    | '/api/admissions/reconcile'
+    | '/api/payments/paystack-webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -218,10 +303,17 @@ export interface RootRouteChildren {
   DownloadsRoute: typeof DownloadsRoute
   FacilitiesRoute: typeof FacilitiesRoute
   GalleryRoute: typeof GalleryRoute
+  LlmsDottxtRoute: typeof LlmsDottxtRoute
   NewsRoute: typeof NewsRouteWithChildren
   SchoolLifeRoute: typeof SchoolLifeRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   StaffRoute: typeof StaffRoute
+  AdmissionsApplicationRoute: typeof AdmissionsApplicationRoute
+  AdmissionsApplyRoute: typeof AdmissionsApplyRoute
+  AdmissionsOfficeRoute: typeof AdmissionsOfficeRoute
+  ApiAdmissionsDocumentsRoute: typeof ApiAdmissionsDocumentsRoute
+  ApiAdmissionsReconcileRoute: typeof ApiAdmissionsReconcileRoute
+  ApiPaymentsPaystackWebhookRoute: typeof ApiPaymentsPaystackWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -296,6 +388,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GalleryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/llms.txt': {
+      id: '/llms.txt'
+      path: '/llms.txt'
+      fullPath: '/llms.txt'
+      preLoaderRoute: typeof LlmsDottxtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/news': {
       id: '/news'
       path: '/news'
@@ -324,12 +423,54 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StaffRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admissions_/application': {
+      id: '/admissions_/application'
+      path: '/admissions/application'
+      fullPath: '/admissions/application'
+      preLoaderRoute: typeof AdmissionsApplicationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admissions_/apply': {
+      id: '/admissions_/apply'
+      path: '/admissions/apply'
+      fullPath: '/admissions/apply'
+      preLoaderRoute: typeof AdmissionsApplyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admissions_/office': {
+      id: '/admissions_/office'
+      path: '/admissions/office'
+      fullPath: '/admissions/office'
+      preLoaderRoute: typeof AdmissionsOfficeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/news/$slug': {
       id: '/news/$slug'
       path: '/$slug'
       fullPath: '/news/$slug'
       preLoaderRoute: typeof NewsSlugRouteImport
       parentRoute: typeof NewsRoute
+    }
+    '/api/admissions/documents': {
+      id: '/api/admissions/documents'
+      path: '/api/admissions/documents'
+      fullPath: '/api/admissions/documents'
+      preLoaderRoute: typeof ApiAdmissionsDocumentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admissions/reconcile': {
+      id: '/api/admissions/reconcile'
+      path: '/api/admissions/reconcile'
+      fullPath: '/api/admissions/reconcile'
+      preLoaderRoute: typeof ApiAdmissionsReconcileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/payments/paystack-webhook': {
+      id: '/api/payments/paystack-webhook'
+      path: '/api/payments/paystack-webhook'
+      fullPath: '/api/payments/paystack-webhook'
+      preLoaderRoute: typeof ApiPaymentsPaystackWebhookRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -355,10 +496,17 @@ const rootRouteChildren: RootRouteChildren = {
   DownloadsRoute: DownloadsRoute,
   FacilitiesRoute: FacilitiesRoute,
   GalleryRoute: GalleryRoute,
+  LlmsDottxtRoute: LlmsDottxtRoute,
   NewsRoute: NewsRouteWithChildren,
   SchoolLifeRoute: SchoolLifeRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   StaffRoute: StaffRoute,
+  AdmissionsApplicationRoute: AdmissionsApplicationRoute,
+  AdmissionsApplyRoute: AdmissionsApplyRoute,
+  AdmissionsOfficeRoute: AdmissionsOfficeRoute,
+  ApiAdmissionsDocumentsRoute: ApiAdmissionsDocumentsRoute,
+  ApiAdmissionsReconcileRoute: ApiAdmissionsReconcileRoute,
+  ApiPaymentsPaystackWebhookRoute: ApiPaymentsPaystackWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

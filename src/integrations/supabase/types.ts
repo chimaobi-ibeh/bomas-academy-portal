@@ -14,6 +14,126 @@ export type Database = {
   }
   public: {
     Tables: {
+      admission_applications: {
+        Row: {
+          birth_cert_path: string
+          birth_cert_size: number | null
+          birth_cert_type: string | null
+          class_applied: string
+          created_at: string
+          currency: string
+          documents_verified_at: string | null
+          email_attempts: number
+          email_locked_until: string | null
+          fee_amount_kobo: number
+          form_data: Json
+          form_version: number
+          id: string
+          last_email_error: string | null
+          paid_amount_kobo: number | null
+          paid_at: string | null
+          parent_email: string
+          parent_email_sent_at: string | null
+          parent_name: string
+          passport_path: string
+          passport_size: number | null
+          passport_type: string | null
+          payment_reference: string | null
+          receipt_number: string | null
+          reference: string
+          school_email_sent_at: string | null
+          status: Database["public"]["Enums"]["admission_status"]
+          student_name: string
+          submitted_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          birth_cert_path: string
+          birth_cert_size?: number | null
+          birth_cert_type?: string | null
+          class_applied: string
+          created_at?: string
+          currency?: string
+          documents_verified_at?: string | null
+          email_attempts?: number
+          email_locked_until?: string | null
+          fee_amount_kobo: number
+          form_data: Json
+          form_version: number
+          id?: string
+          last_email_error?: string | null
+          paid_amount_kobo?: number | null
+          paid_at?: string | null
+          parent_email: string
+          parent_email_sent_at?: string | null
+          parent_name: string
+          passport_path: string
+          passport_size?: number | null
+          passport_type?: string | null
+          payment_reference?: string | null
+          receipt_number?: string | null
+          reference: string
+          school_email_sent_at?: string | null
+          status?: Database["public"]["Enums"]["admission_status"]
+          student_name: string
+          submitted_at?: string | null
+          updated_at?: string
+        }
+        Update: Partial<Database["public"]["Tables"]["admission_applications"]["Insert"]>
+        Relationships: []
+      }
+      admission_payment_attempts: {
+        Row: {
+          amount_kobo: number
+          application_id: string
+          created_at: string
+          currency: string
+          duplicate_notified_at: string | null
+          duplicate_payment: boolean
+          gateway_response: string | null
+          id: string
+          paid_at: string | null
+          provider: string
+          provider_transaction_id: string | null
+          reference: string
+          status: "initialized" | "success" | "failed" | "abandoned"
+          updated_at: string
+          verified_at: string | null
+        }
+        Insert: {
+          amount_kobo: number
+          application_id: string
+          created_at?: string
+          currency?: string
+          duplicate_notified_at?: string | null
+          duplicate_payment?: boolean
+          gateway_response?: string | null
+          id?: string
+          paid_at?: string | null
+          provider: string
+          provider_transaction_id?: string | null
+          reference: string
+          status?: "initialized" | "success" | "failed" | "abandoned"
+          updated_at?: string
+          verified_at?: string | null
+        }
+        Update: Partial<Database["public"]["Tables"]["admission_payment_attempts"]["Insert"]>
+        Relationships: [
+          {
+            foreignKeyName: "admission_payment_attempts_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "admission_applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admission_rate_limits: {
+        Row: { bucket: string; hits: number; window_start: string }
+        Insert: { bucket: string; hits?: number; window_start?: string }
+        Update: { bucket?: string; hits?: number; window_start?: string }
+        Relationships: []
+      }
       gallery_images: {
         Row: {
           created_at: string
@@ -154,6 +274,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admission_rate_limit_hit: {
+        Args: { p_bucket: string; p_limit: number; p_window_seconds: number }
+        Returns: boolean
+      }
+      finalize_admission_payment: {
+        Args: {
+          p_amount_kobo: number
+          p_attempt_reference: string
+          p_currency: string
+          p_paid_at: string
+          p_transaction_id: string
+        }
+        Returns: {
+          application_id: string
+          duplicate_payment: boolean
+          newly_submitted: boolean
+          receipt_number: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -163,6 +302,7 @@ export type Database = {
       }
     }
     Enums: {
+      admission_status: "PENDING_PAYMENT" | "PAYMENT_FAILED" | "SUBMITTED"
       app_role: "admin"
     }
     CompositeTypes: {
@@ -291,6 +431,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      admission_status: ["PENDING_PAYMENT", "PAYMENT_FAILED", "SUBMITTED"],
       app_role: ["admin"],
     },
   },

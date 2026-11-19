@@ -76,6 +76,7 @@ export const NAV_GROUPS: Group[] = [
     to: "/admissions",
     items: [
       { to: "/admissions", label: "How to apply", note: "Steps for new families" },
+      { to: "/admissions/apply", label: "Apply online", note: "Fill in the forms and pay the fee" },
       { to: "/downloads", label: "Forms and downloads", note: "Prospectus and policies" },
       { to: "/contact", label: "Visit or call us", note: "Talk to the school office" },
     ],
