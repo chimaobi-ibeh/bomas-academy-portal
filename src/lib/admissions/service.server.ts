@@ -5,11 +5,17 @@ import type { PaymentProvider } from "./payments/types";
 import { buildDocument, documentFileName, type DocumentKind } from "./pdf";
 import {
   FORM_VERSION,
+  SCHOOL_SECTIONS,
   UPLOADS,
+  UPLOAD_KINDS,
   applicantName,
   applicationSchema,
   childName,
+  documentsToBring,
+  schoolSection,
+  uploadsFor,
   type ApplicationData,
+  type SchoolSection,
   type UploadKind,
 } from "./schema";
 import {
@@ -85,6 +91,33 @@ function extFor(type: string) {
   return type === "application/pdf" ? "pdf" : type === "image/png" ? "png" : "jpg";
 }
 
+type ExtraDocuments = Partial<Record<UploadKind, { path: string; type?: string; size?: number }>>;
+
+/** Every uploaded document of an application, with its storage path. */
+export function documentPaths(app: Pick<ApplicationRow, "passport_path" | "birth_cert_path" | "extra_documents">) {
+  const extra = (app.extra_documents ?? {}) as ExtraDocuments;
+  const out: { kind: UploadKind; path: string }[] = [
+    { kind: "passport", path: app.passport_path },
+    { kind: "birthCertificate", path: app.birth_cert_path },
+  ];
+  for (const kind of UPLOAD_KINDS) {
+    const doc = extra[kind];
+    if (kind !== "passport" && kind !== "birthCertificate" && doc?.path) out.push({ kind, path: doc.path });
+  }
+  return out;
+}
+
+function sectionOf(app: Pick<ApplicationRow, "school_section" | "class_applied">): SchoolSection {
+  return app.school_section ?? schoolSection(app.class_applied);
+}
+
+async function uploadUrls(deps: Deps, docs: { kind: UploadKind; path: string }[]) {
+  const urls = await Promise.all(docs.map((d) => deps.storage.createUploadUrl(d.path)));
+  return Object.fromEntries(docs.map((d, i) => [d.kind, urls[i]])) as Partial<
+    Record<UploadKind, { path: string; token: string }>
+  >;
+}
+
 export function accessLink(deps: Deps, app: Pick<ApplicationRow, "reference" | "id">, audience: Audience) {
   const token = accessToken(deps.config.linkSecret, audience, app.reference, app.id);
   const page = audience === "parent" ? "application" : "office";
@@ -115,7 +148,7 @@ export type DeclaredUpload = { type: string; size: number };
 
 export async function createApplication(
   deps: Deps,
-  input: { form?: unknown; uploads: Record<UploadKind, DeclaredUpload> },
+  input: { form?: unknown; uploads: Partial<Record<UploadKind, DeclaredUpload>> },
   headers: Headers,
 ) {
   const { config } = deps;
@@ -131,7 +164,10 @@ export async function createApplication(
       field: first?.path.join(".") ?? "",
     });
   }
-  for (const kind of Object.keys(UPLOADS) as UploadKind[]) {
+  const data = parsed.data;
+  // Exactly the files this application needs: the two required ones and those the parent chose to upload.
+  const kinds = uploadsFor(data);
+  for (const kind of kinds) {
     const declared = input.uploads?.[kind];
     const rule = UPLOADS[kind];
     if (!declared || !(rule.types as readonly string[]).includes(declared.type) || !(declared.size > 0) || declared.size > rule.maxBytes) {
@@ -139,12 +175,14 @@ export async function createApplication(
     }
   }
 
-  const data = parsed.data;
   const id = randomUUID();
-  const paths = {
-    passport: `${id}/passport.${extFor(input.uploads.passport.type)}`,
-    birthCertificate: `${id}/birth-certificate.${extFor(input.uploads.birthCertificate.type)}`,
-  };
+  const docs = kinds.map((kind) => ({
+    kind,
+    path: `${id}/${UPLOADS[kind].file.toLowerCase()}.${extFor(input.uploads[kind]!.type)}`,
+  }));
+  const pathOf = (kind: UploadKind) => docs.find((d) => d.kind === kind)!.path;
+  const extra: ExtraDocuments = {};
+  for (const d of docs) if (d.kind !== "passport" && d.kind !== "birthCertificate") extra[d.kind] = { path: d.path };
 
   let app: ApplicationRow | null = null;
   for (let tries = 0; tries < 5 && !app; tries++) {
@@ -158,8 +196,10 @@ export async function createApplication(
         class_applied: data.child.classSought,
         form_version: FORM_VERSION,
         form_data: data as never,
-        passport_path: paths.passport,
-        birth_cert_path: paths.birthCertificate,
+        passport_path: pathOf("passport"),
+        birth_cert_path: pathOf("birthCertificate"),
+        extra_documents: extra as never,
+        school_section: schoolSection(data.child.classSought),
         fee_amount_kobo: config.feeKobo,
         currency: config.currency,
       });
@@ -170,15 +210,11 @@ export async function createApplication(
   if (!app) throw new AdmissionError("UNAVAILABLE", "Please try again.");
   log("application.created", { ref: app.reference });
 
-  const [passport, birthCertificate] = await Promise.all([
-    deps.storage.createUploadUrl(paths.passport),
-    deps.storage.createUploadUrl(paths.birthCertificate),
-  ]);
   return {
     reference: app.reference,
     token: accessToken(config.linkSecret, "parent", app.reference, app.id),
     feeKobo: app.fee_amount_kobo,
-    uploads: { passport, birthCertificate },
+    uploads: await uploadUrls(deps, docs),
   };
 }
 
@@ -187,22 +223,16 @@ export async function prepareUploads(deps: Deps, input: { reference: string; tok
   await rateLimit(deps, "pay", headers);
   const app = await authorize(deps, input.reference, input.token, "parent");
   if (app.status === "SUBMITTED") throw new AdmissionError("INVALID", "This application has already been submitted.");
-  const [passport, birthCertificate] = await Promise.all([
-    deps.storage.createUploadUrl(app.passport_path),
-    deps.storage.createUploadUrl(app.birth_cert_path),
-  ]);
+  const urls = await uploadUrls(deps, documentPaths(app));
   await deps.store.updateApplication(app.id, { documents_verified_at: null });
-  return { passport, birthCertificate };
+  return urls;
 }
 
 /** Server-side check of the uploaded files: present, real JPEG/PNG/PDF, within size limits. */
 async function verifyDocuments(deps: Deps, app: ApplicationRow) {
-  const checks = [
-    { kind: "passport" as const, path: app.passport_path },
-    { kind: "birthCertificate" as const, path: app.birth_cert_path },
-  ];
   const patch: Record<string, string | number> = {};
-  for (const c of checks) {
+  const extra = { ...((app.extra_documents ?? {}) as ExtraDocuments) };
+  for (const c of documentPaths(app)) {
     const rule = UPLOADS[c.kind];
     const bytes = await deps.storage.download(c.path);
     if (!bytes) throw new AdmissionError("DOCUMENTS_MISSING", `Please upload the ${rule.label.toLowerCase()}.`, { field: c.kind });
@@ -211,11 +241,19 @@ async function verifyDocuments(deps: Deps, app: ApplicationRow) {
       await deps.storage.remove([c.path]);
       throw new AdmissionError("DOCUMENTS_INVALID", `${rule.label}: ${rule.hint}`, { field: c.kind });
     }
-    const prefix = c.kind === "passport" ? "passport" : "birth_cert";
-    patch[`${prefix}_type`] = type;
-    patch[`${prefix}_size`] = bytes.length;
+    if (c.kind === "passport" || c.kind === "birthCertificate") {
+      const prefix = c.kind === "passport" ? "passport" : "birth_cert";
+      patch[`${prefix}_type`] = type;
+      patch[`${prefix}_size`] = bytes.length;
+    } else {
+      extra[c.kind] = { path: c.path, type, size: bytes.length };
+    }
   }
-  await deps.store.updateApplication(app.id, { ...patch, documents_verified_at: new Date().toISOString() });
+  await deps.store.updateApplication(app.id, {
+    ...patch,
+    extra_documents: extra as never,
+    documents_verified_at: new Date().toISOString(),
+  });
 }
 
 // ---------------------------------------------------------------------------------------
@@ -227,6 +265,12 @@ export async function startPayment(deps: Deps, input: { reference: string; token
   let app = await authorize(deps, input.reference, input.token, "parent");
   if (app.status === "SUBMITTED") return { status: "SUBMITTED" as const };
   if (!deps.config.paymentsEnabled || !deps.provider) {
+    throw new AdmissionError("PAYMENTS_DISABLED", "Online payment is not available at the moment. Please contact the school office.");
+  }
+  // The fee goes to the bank account of the part of the school the child is applying to.
+  const section = sectionOf(app);
+  const subaccount = deps.config.subaccounts?.[section];
+  if (!subaccount) {
     throw new AdmissionError("PAYMENTS_DISABLED", "Online payment is not available at the moment. Please contact the school office.");
   }
   if (!app.documents_verified_at) await verifyDocuments(deps, app);
@@ -246,6 +290,7 @@ export async function startPayment(deps: Deps, input: { reference: string; token
     reference: newPaymentReference(app.reference),
     amount_kobo: app.fee_amount_kobo,
     currency: app.currency,
+    subaccount,
   });
   try {
     const { checkoutUrl } = await deps.provider.initialize({
@@ -254,10 +299,15 @@ export async function startPayment(deps: Deps, input: { reference: string; token
       currency: "NGN",
       email: app.parent_email,
       callbackUrl: `${deps.config.siteUrl}/admissions/application?ref=${app.reference}`,
-      metadata: { application_reference: app.reference, purpose: "Admission application fee" },
+      subaccount,
+      metadata: {
+        application_reference: app.reference,
+        school_section: SCHOOL_SECTIONS[section].label,
+        purpose: "Admission application fee",
+      },
     });
     if (app.status === "PAYMENT_FAILED") await deps.store.setApplicationStatusIf(app.id, "PAYMENT_FAILED", "PENDING_PAYMENT");
-    log("payment.started", { ref: app.reference, attempt: attempt.reference });
+    log("payment.started", { ref: app.reference, attempt: attempt.reference, section });
     return { status: "REDIRECT" as const, checkoutUrl };
   } catch (e) {
     await deps.store.closeAttempt(attempt.reference, "failed", "could not start checkout");
@@ -287,6 +337,10 @@ export async function confirmAttempt(deps: Deps, attemptReference: string): Prom
       log("payment.amount_mismatch", { attempt: attempt.reference, expected: attempt.amount_kobo, got: v.amountKobo });
       await deps.store.closeAttempt(attempt.reference, "failed", "amount or currency mismatch");
       return { outcome: "failed", applicationId: attempt.application_id };
+    }
+    if (attempt.subaccount && v.subaccount && v.subaccount !== attempt.subaccount) {
+      // It is paid, so it still counts, but the school must move the money: flag it.
+      log("payment.unexpected_subaccount", { attempt: attempt.reference, expected: attempt.subaccount, got: v.subaccount });
     }
     const result = await deps.store.finalizePayment({
       attemptReference: attempt.reference,
@@ -380,6 +434,11 @@ export type ApplicationView = {
   submittedAt: string | null;
   testMode: boolean;
   documentsUploaded: boolean;
+  schoolSection: string;
+  /** Documents uploaded online (kinds only, never the files). */
+  documents: UploadKind[];
+  /** Documents the parent will bring to the school office when called. */
+  toBring: string[];
 };
 
 function toView(app: ApplicationRow, attempts: AttemptRow[], testMode: boolean): ApplicationView {
@@ -402,6 +461,9 @@ function toView(app: ApplicationRow, attempts: AttemptRow[], testMode: boolean):
     submittedAt: app.submitted_at,
     testMode,
     documentsUploaded: !!app.documents_verified_at,
+    schoolSection: SCHOOL_SECTIONS[sectionOf(app)].label,
+    documents: documentPaths(app).map((d) => d.kind),
+    toBring: documentsToBring(app.form_data as never),
   };
 }
 
@@ -432,7 +494,7 @@ export async function getApplicationStatus(
 // 5. Documents
 // ---------------------------------------------------------------------------------------
 
-export type DownloadKind = DocumentKind | "passport" | "birth-certificate";
+export type DownloadKind = DocumentKind | UploadKind;
 
 export async function getDocument(
   deps: Deps,
@@ -448,20 +510,22 @@ export async function getDocument(
     throw new AdmissionError("NOT_SUBMITTED", "Documents are available once payment has been confirmed.");
   }
 
-  if (input.kind === "passport" || input.kind === "birth-certificate") {
+  if (Object.hasOwn(UPLOADS, input.kind)) {
     // Original uploads are for the school only, through a 60-second signed URL.
-    if (input.audience !== "school") throw new AdmissionError("NOT_FOUND", "We could not find that document.");
-    const path = input.kind === "passport" ? app.passport_path : app.birth_cert_path;
-    const ext = path.split(".").pop();
-    const name = `${input.kind === "passport" ? "Passport-Photo" : "Birth-Certificate"}-${app.reference}.${ext}`;
-    return { type: "redirect", url: await deps.storage.signedDownloadUrl(path, 60, name) };
+    const kind = input.kind as UploadKind;
+    const doc = documentPaths(app).find((d) => d.kind === kind);
+    if (input.audience !== "school" || !doc) throw new AdmissionError("NOT_FOUND", "We could not find that document.");
+    const ext = doc.path.split(".").pop();
+    const name = `${UPLOADS[kind].file}-${app.reference}.${ext}`;
+    return { type: "redirect", url: await deps.storage.signedDownloadUrl(doc.path, 60, name) };
   }
 
   const data = app.form_data as unknown as ApplicationData;
-  const needsPhoto = input.kind === "admission-form" || input.kind === "all";
+  const docKind = input.kind as DocumentKind;
+  const needsPhoto = docKind === "admission-form" || docKind === "all";
   const passportPhoto = needsPhoto ? await deps.storage.download(app.passport_path) : null;
   const out = await buildDocument(
-    input.kind,
+    docKind,
     { reference: app.reference, data, submittedAt: app.submitted_at, passportPhoto },
     {
       receiptNumber: app.receipt_number,
@@ -527,7 +591,7 @@ export async function reconcile(deps: Deps) {
   for (const app of await deps.store.listStaleUnpaid(new Date(now.getTime() - 30 * 86_400_000), 25)) {
     const attempts = await deps.store.listAttempts(app.id);
     if (attempts.some((a) => a.status === "success")) continue;
-    await deps.storage.remove([app.passport_path, app.birth_cert_path]);
+    await deps.storage.remove(documentPaths(app).map((d) => d.path));
     await deps.store.deleteApplication(app.id);
     summary.purged++;
   }

@@ -74,6 +74,7 @@ describe("PDF generation", () => {
   it("adds a continuation sheet instead of cutting off long answers", async () => {
     const input = sampleInput();
     input.reasonForChoosing = "We value character education. ".repeat(30).trim();
+    input.health.hasSpecialInformation = "yes";
     input.health.specialInformation = "Needs extra support settling in. ".repeat(20).trim();
     input.child.classSought = "JSS 1";
     input.applicant.relationship = "Other";

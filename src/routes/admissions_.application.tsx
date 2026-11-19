@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, CircleAlert, Clock, Loader2, Lock } from "@/components/icons";
 import { getAdmissionStatus, startAdmissionPayment } from "@/lib/api/admissions.functions";
 import { loadPending, savePending, tokenFromHash } from "@/lib/admissions/pending";
-import { BRING_TO_SCHOOL, PAYMENT_DISCLAIMER } from "@/lib/admissions/original-text";
+import { PAYMENT_DISCLAIMER } from "@/lib/admissions/original-text";
 import { formatNaira } from "@/lib/admissions/format";
 import type { ApplicationView } from "@/lib/admissions/service.server";
 
@@ -165,9 +165,9 @@ function Ready({ app, token, paying, onPay, onCheck }: { app: ApplicationView; t
           </div>
         </div>
         <div className="rounded-lg border bg-surface p-6">
-          <h2 className="font-display text-lg font-bold">Next: bring these to the school office</h2>
+          <h2 className="font-display text-lg font-bold">Next: bring these to the school office when the school calls you in</h2>
           <ul className="mt-3 list-disc space-y-1.5 pl-5 text-[15px]">
-            {BRING_TO_SCHOOL.map((b) => <li key={b}>{b}</li>)}
+            {app.toBring.map((b) => <li key={b}>{b}</li>)}
           </ul>
           <p className="mt-4 text-[15px] font-semibold">{PAYMENT_DISCLAIMER}</p>
           <p className="mt-1 text-[15px] text-muted-foreground">The school will contact you about the next steps.</p>

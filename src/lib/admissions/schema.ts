@@ -6,7 +6,7 @@ import { z } from "zod";
  * Field names follow the original paper forms (see docs/admissions/PLAN.md, section 4).
  */
 
-export const FORM_VERSION = 1;
+export const FORM_VERSION = 2;
 
 /** Classes offered for admission (question Q4 in the plan: confirm with Bomas). */
 export const CLASS_OPTIONS = [
@@ -43,6 +43,21 @@ export const CLASS_FORM_GRADES = [
   "Primary Five",
 ] as const;
 
+/**
+ * The school has two settlement accounts. The class chosen decides which one the
+ * application fee is paid into: JSS and SSS classes go to the secondary school account,
+ * everything else to the nursery/primary account.
+ */
+export const SCHOOL_SECTIONS = {
+  "nursery-primary": { label: "Nursery and Primary" },
+  secondary: { label: "Secondary" },
+} as const;
+export type SchoolSection = keyof typeof SCHOOL_SECTIONS;
+
+export function schoolSection(classSought: string): SchoolSection {
+  return /^(JSS|SSS) /.test(classSought) ? "secondary" : "nursery-primary";
+}
+
 export const NIGERIAN_STATES = [
   "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa", "Benue", "Borno",
   "Cross River", "Delta", "Ebonyi", "Edo", "Ekiti", "Enugu", "FCT Abuja", "Gombe", "Imo",
@@ -78,6 +93,65 @@ export const AILMENTS = [
   { key: "otherInfirmityOrAllergy", label: "Any other infirmity or allergy?" },
 ] as const;
 
+/**
+ * Documents accepted online (question Q3 in the plan). The child's passport photograph and
+ * birth certificate must be uploaded. Each of the others is either uploaded or brought to the
+ * school when the family is called in. One passport photograph of the child is enough: the
+ * school prints any extra copies it needs from the upload.
+ */
+const PHOTO = { types: ["image/jpeg", "image/png"], maxBytes: 3 * 1024 * 1024 } as const;
+const SCAN = { types: ["application/pdf", "image/jpeg", "image/png"], maxBytes: 5 * 1024 * 1024 } as const;
+const PHOTO_HINT = "A clear, recent, front-facing photo. JPG or PNG, up to 3 MB.";
+export const UPLOADS = {
+  passport: {
+    ...PHOTO,
+    label: "Child's passport photograph",
+    hint: PHOTO_HINT,
+    bring: "",
+    file: "Passport-Photo",
+  },
+  birthCertificate: {
+    ...SCAN,
+    label: "Child's birth certificate",
+    hint: "A scan or clear photo of the certificate. PDF, JPG or PNG, up to 5 MB.",
+    bring: "",
+    file: "Birth-Certificate",
+  },
+  fatherPassport: {
+    ...PHOTO,
+    label: "Father's passport photograph",
+    hint: PHOTO_HINT,
+    bring: "The father's passport photograph",
+    file: "Father-Passport-Photo",
+  },
+  motherPassport: {
+    ...PHOTO,
+    label: "Mother's passport photograph",
+    hint: PHOTO_HINT,
+    bring: "The mother's passport photograph",
+    file: "Mother-Passport-Photo",
+  },
+  immunisationCard: {
+    ...SCAN,
+    label: "Child's immunisation card",
+    hint: "A scan or clear photo of the card. PDF, JPG or PNG, up to 5 MB.",
+    bring: "A photocopy of the child's immunisation card",
+    file: "Immunisation-Card",
+  },
+  surgicalReport: {
+    ...SCAN,
+    label: "Surgical report",
+    hint: "The report of your child's operation. PDF, JPG or PNG, up to 5 MB.",
+    bring: "The surgical report of your child's operation",
+    file: "Surgical-Report",
+  },
+} as const;
+export type UploadKind = keyof typeof UPLOADS;
+export const UPLOAD_KINDS = Object.keys(UPLOADS) as UploadKind[];
+export const REQUIRED_UPLOAD_KINDS = ["passport", "birthCertificate"] as const;
+export const OPTIONAL_UPLOAD_KINDS = ["fatherPassport", "motherPassport", "immunisationCard", "surgicalReport"] as const;
+export type OptionalUploadKind = (typeof OPTIONAL_UPLOAD_KINDS)[number];
+
 const t = (max: number) => z.string().trim().max(max);
 /** A required choice. Unanswered radios/selects get a friendly message instead of zod's default. */
 const choice = <T extends readonly [string, ...string[]]>(values: T, message: string) =>
@@ -98,7 +172,12 @@ const isoDate = (label: string) =>
     .regex(/^\d{4}-\d{2}-\d{2}$/, `Please enter ${label}`)
     .refine((v) => !Number.isNaN(Date.parse(v)), `Please enter a valid ${label}`);
 
+// Parent fields are checked in crossFieldIssues: everything is required unless the
+// applicant says this parent's details cannot be given (for example, deceased).
 const parentSchema = z.object({
+  unavailable: z.boolean().default(false),
+  unavailableReason: opt(120),
+  sameAddress: z.boolean().default(false),
   fullName: opt(120),
   occupation: opt(120),
   phone: optPhone("phone number"),
@@ -130,6 +209,7 @@ const baseShapeForIssues = z
     custody: opt(200),
     residentialAddress: req("your full residential address", 300),
     livesWith: req("who the child lives with", 120),
+    hasOtherCustodians: yesNo,
     otherCustodians: z
       .array(z.object({ name: opt(120), relationship: opt(60), workPhone: optPhone("work phone") }))
       .max(2)
@@ -144,8 +224,8 @@ const baseShapeForIssues = z
       dateOfBirth: isoDate("the child's date of birth"),
       placeOfBirth: req("the place of birth", 120),
       stateOfOrigin: choice(NIGERIAN_STATES, "Please choose a state of origin"),
-      tribe: opt(60),
-      religion: opt(60),
+      tribe: req("the child's tribe", 60),
+      religion: req("the child's religion", 60),
       classSought: choice(CLASS_OPTIONS, "Please choose a class"),
       primaryLanguage: req("the child's primary language", 60),
       homeLanguage: req("the language spoken at home", 60),
@@ -153,9 +233,18 @@ const baseShapeForIssues = z
     homePhone: optPhone("home phone"),
     previousSchool: opt(300),
     heardAbout: req("how you heard about us", 200),
+    introduced: yesNo,
     introducerName: opt(120),
     introducerPhone: optPhone("phone number"),
-    childrenAtBomas: z.coerce.number().int().min(0).max(20).default(0),
+    childrenAtBomas: z.preprocess(
+      (x) => (x === "" || x === null || x === undefined ? undefined : Number(x)),
+      z
+        .number({ required_error: "Please enter a number (0 if none)", invalid_type_error: "Please enter a number (0 if none)" })
+        .int("Please enter a whole number")
+        .min(0, "Please enter 0 or more")
+        .max(20, "Please check this number"),
+    ),
+    hasOtherChildren: yesNo,
     otherChildren: z
       .array(z.object({ name: opt(120), dateOfBirth: opt(20) }))
       .max(4)
@@ -179,6 +268,7 @@ const baseShapeForIssues = z
       schoolPhone: optPhone("school phone"),
       schoolEmail: optEmail,
       languageOfInstruction: opt(60),
+      hasDifficulties: yesNo,
       difficulties: opt(600),
     }),
     reasonForChoosing: req("why you chose Bomas Academy", 1000),
@@ -212,9 +302,20 @@ const baseShapeForIssues = z
       ),
       medication: yesNo,
       medicationDetails: opt(300),
+      hasOtherMedicalInfo: yesNo,
       otherMedicalInfo: opt(600),
+      hasSpecialInformation: yesNo,
       specialInformation: opt(800),
     }),
+
+    // ---- Step 5: Documents that may be uploaded or brought to the school -------------
+    documents: z
+      .object(
+        Object.fromEntries(
+          OPTIONAL_UPLOAD_KINDS.map((k) => [k, z.enum(["upload", "bring"]).optional()]),
+        ) as Record<OptionalUploadKind, z.ZodOptional<z.ZodEnum<["upload", "bring"]>>>,
+      )
+      .default({}),
 
     // ---- Step 6: Declarations and agreement ------------------------------------------
     declarations: z.object({
@@ -238,35 +339,132 @@ export const applicationSchema = baseShapeForIssues.superRefine((v, ctx) => {
 });
 
 type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] };
+type PartialApplication = DeepPartial<z.output<typeof baseShapeForIssues>>;
+
+const filled = (x: unknown) => typeof x === "string" && x.trim().length > 0;
 
 /**
  * Rules that depend on more than one answer. Shared by the schema and by the form, which runs
  * them per step (zod only runs refinements once every other field is valid).
  * Tolerates a half-completed form.
+ *
+ * Every question must be answered. The only blanks allowed are answers that cannot exist for
+ * some families: a middle name, a landline or office phone, a school email address, and the
+ * follow-up details of a question answered "No".
  */
-export function crossFieldIssues(v: DeepPartial<z.output<typeof baseShapeForIssues>>) {
+export function crossFieldIssues(v: PartialApplication) {
   const issues: { path: (string | number)[]; message: string }[] = [];
   const needs = (cond: unknown, path: (string | number)[], message: string) => {
     if (cond) issues.push({ path, message });
   };
+  const required = (value: unknown, path: (string | number)[], message: string) => needs(!filled(value), path, message);
+
   needs(
-    v.applicant?.relationship === "Other" && !v.applicant?.relationshipOther,
+    v.applicant?.relationship === "Other" && !filled(v.applicant?.relationshipOther),
     ["applicant", "relationshipOther"],
     "Please say how you are related to the child (for example UNCLE)",
   );
-  needs(v.maritalStatus === "Divorced" && !v.custody, ["custody"], "Please say who has custody");
-  needs(!v.father?.phone && !v.mother?.phone, ["father", "phone"], "Please give a phone number for at least one parent");
-  needs(!v.father?.fullName && !v.mother?.fullName, ["father", "fullName"], "Please give the name of at least one parent");
+
+  // Parents
+  for (const who of ["father", "mother"] as const) {
+    const p = v[who];
+    if (p?.unavailable) {
+      required(p.unavailableReason, [who, "unavailableReason"], `Please say why the ${who}'s details cannot be given`);
+      continue;
+    }
+    required(p?.fullName, [who, "fullName"], `Please enter the ${who}'s full name`);
+    required(p?.occupation, [who, "occupation"], `Please enter the ${who}'s occupation`);
+    required(p?.phone, [who, "phone"], `Please enter the ${who}'s phone number`);
+    required(p?.email, [who, "email"], `Please enter the ${who}'s email address`);
+    if (!p?.sameAddress) {
+      required(p?.address, [who, "address"], `Please enter the ${who}'s address, or tick "Same as the child's home address"`);
+    }
+  }
+  needs(
+    v.father?.unavailable && v.mother?.unavailable && v.applicant?.relationship !== "Other",
+    ["father", "unavailable"],
+    "Please give the details of at least one parent",
+  );
+
+  needs(
+    (v.maritalStatus === "Divorced" || v.maritalStatus === "Separated") && !filled(v.custody),
+    ["custody"],
+    "Please say who has custody of the child",
+  );
+  if (v.hasOtherCustodians === "yes") {
+    const rows = v.otherCustodians ?? [];
+    for (let i = 0; i < Math.max(1, rows.length); i++) {
+      const g = rows[i];
+      if (i > 0 && !filled(g?.name) && !filled(g?.relationship) && !filled(g?.workPhone)) continue;
+      required(g?.name, ["otherCustodians", i, "name"], "Please enter their name");
+      required(g?.relationship, ["otherCustodians", i, "relationship"], "Please enter their relationship to the child");
+      required(g?.workPhone, ["otherCustodians", i, "workPhone"], "Please enter their phone number");
+    }
+  }
+
+  // Child
   const dob = Date.parse(v.child?.dateOfBirth ?? "");
   if (!Number.isNaN(dob)) {
     const ageYears = (Date.now() - dob) / (365.25 * 24 * 3600 * 1000);
     needs(ageYears < 1 || ageYears > 25, ["child", "dateOfBirth"], "Please check the date of birth");
   }
+  if (v.introduced === "yes") {
+    required(v.introducerName, ["introducerName"], "Please enter the name of the person who introduced you");
+    required(v.introducerPhone, ["introducerPhone"], "Please enter their phone number");
+  }
+  if (v.hasOtherChildren === "yes") {
+    const rows = v.otherChildren ?? [];
+    for (let i = 0; i < Math.max(1, rows.length); i++) {
+      const c = rows[i];
+      if (i > 0 && !filled(c?.name) && !filled(c?.dateOfBirth)) continue;
+      required(c?.name, ["otherChildren", i, "name"], "Please enter the child's name");
+      required(c?.dateOfBirth, ["otherChildren", i, "dateOfBirth"], "Please enter the date of birth");
+    }
+  }
+  const t = v.transport;
+  needs(
+    ![t?.bus, t?.parentDropOff, t?.walksHome, t?.other].some(filled),
+    ["transport", "parentDropOff"],
+    "Please say how your child will get to school and home (fill in at least one)",
+  );
+
+  // Education
+  const e = v.education;
+  if (!e?.neverAttended) {
+    const school = [
+      ["presentSchool", "the name of the present school"],
+      ["dateFrom", "when your child started at this school"],
+      ["dateTo", "when your child leaves (or left) this school"],
+      ["reasonForLeaving", "the reason for leaving"],
+      ["headTeacher", "the head teacher's name and title"],
+      ["schoolAddress", "the school's address"],
+      ["schoolPhone", "the school's phone number"],
+      ["languageOfInstruction", "the language of instruction"],
+    ] as const;
+    for (const [key, what] of school) required(e?.[key], ["education", key], `Please enter ${what}`);
+  }
+  needs(e?.hasDifficulties === "yes" && !filled(e?.difficulties), ["education", "difficulties"], "Please describe the difficulties");
+
+  // Health
   const h = v.health;
-  needs(h?.otherVaccination === "yes" && !h?.otherVaccinationType, ["health", "otherVaccinationType"], "Please state the type of vaccination");
-  needs(h?.hospitalAdmission === "yes" && !h?.hospitalAdmissionDetails, ["health", "hospitalAdmissionDetails"], "Please give the kind of illness and duration");
-  needs(h?.surgery === "yes" && !h?.surgeryDetails, ["health", "surgeryDetails"], "Please give the year and type of operation");
-  needs(h?.medication === "yes" && !h?.medicationDetails, ["health", "medicationDetails"], "Please say which medication");
+  for (const group of ["illnesses", "inoculations"] as const) {
+    for (const [key, item] of Object.entries(h?.[group] ?? {})) {
+      needs(item?.ticked && !filled(item?.date), ["health", group, key, "date"], "Please add the date or year");
+    }
+  }
+  needs(h?.otherVaccination === "yes" && !filled(h?.otherVaccinationType), ["health", "otherVaccinationType"], "Please state the type of vaccination");
+  needs(h?.hospitalAdmission === "yes" && !filled(h?.hospitalAdmissionYear), ["health", "hospitalAdmissionYear"], "Please give the year of admission");
+  needs(h?.hospitalAdmission === "yes" && !filled(h?.hospitalAdmissionDetails), ["health", "hospitalAdmissionDetails"], "Please give the kind of illness and duration");
+  needs(h?.surgery === "yes" && !filled(h?.surgeryDetails), ["health", "surgeryDetails"], "Please give the year and type of operation");
+  needs(h?.medication === "yes" && !filled(h?.medicationDetails), ["health", "medicationDetails"], "Please say which medication");
+  needs(h?.hasOtherMedicalInfo === "yes" && !filled(h?.otherMedicalInfo), ["health", "otherMedicalInfo"], "Please give the medical information");
+  needs(h?.hasSpecialInformation === "yes" && !filled(h?.specialInformation), ["health", "specialInformation"], "Please give the information");
+
+  // Documents: each one that applies is either uploaded now or brought to the school.
+  for (const kind of optionalDocumentsFor(v)) {
+    needs(!v.documents?.[kind], ["documents", kind], "Please choose to upload it now or bring it to the school");
+  }
+
   const sig = (v.declarations?.signatureName ?? "").toLowerCase().replace(/\s+/g, " ");
   const surname = (v.applicant?.surname ?? "").trim().toLowerCase();
   needs(sig && surname && !sig.includes(surname), ["declarations", "signatureName"], "Please type your full name, including your surname");
@@ -276,22 +474,32 @@ export function crossFieldIssues(v: DeepPartial<z.output<typeof baseShapeForIssu
 export type ApplicationData = z.infer<typeof applicationSchema>;
 export type ApplicationInput = z.input<typeof applicationSchema>;
 
-/** Document uploads accepted online (question Q3 in the plan). */
-export const UPLOADS = {
-  passport: {
-    label: "Child's passport photograph",
-    types: ["image/jpeg", "image/png"],
-    maxBytes: 3 * 1024 * 1024,
-    hint: "A clear, recent, front-facing photo. JPG or PNG, up to 3 MB.",
-  },
-  birthCertificate: {
-    label: "Child's birth certificate",
-    types: ["application/pdf", "image/jpeg", "image/png"],
-    maxBytes: 5 * 1024 * 1024,
-    hint: "A scan or clear photo of the certificate. PDF, JPG or PNG, up to 5 MB.",
-  },
-} as const;
-export type UploadKind = keyof typeof UPLOADS;
+/** The optional documents that apply to this application (no photo for a parent whose details are not given). */
+export function optionalDocumentsFor(v: PartialApplication): OptionalUploadKind[] {
+  const out: OptionalUploadKind[] = [];
+  if (!v.father?.unavailable) out.push("fatherPassport");
+  if (!v.mother?.unavailable) out.push("motherPassport");
+  out.push("immunisationCard");
+  if (v.health?.surgery === "yes") out.push("surgicalReport");
+  return out;
+}
+
+/** Every file this application uploads: the two required ones plus those the parent chose to upload. */
+export function uploadsFor(v: PartialApplication): UploadKind[] {
+  return [...REQUIRED_UPLOAD_KINDS, ...optionalDocumentsFor(v).filter((k) => v.documents?.[k] === "upload")];
+}
+
+/** What the parent must bring to the school office when called in, for this application. */
+export function documentsToBring(v: PartialApplication): string[] {
+  const out = ["The original birth certificate (for sighting only)"];
+  for (const kind of optionalDocumentsFor(v)) {
+    if (v.documents?.[kind] !== "upload") out.push(UPLOADS[kind].bring);
+  }
+  if (!v.education?.neverAttended) {
+    out.push("Form 2 signed and stamped by the head teacher of your child's present school");
+  }
+  return out;
+}
 
 export function fullName(p: { surname: string; firstName: string; middleName?: string }) {
   return [p.firstName, p.middleName, p.surname].filter(Boolean).join(" ").trim();
@@ -308,6 +516,7 @@ export function applicantName(d: ApplicationData) {
 /** Empty starting values for the form. */
 export function emptyApplication(): ApplicationInput {
   const parent = {
+    unavailable: false, unavailableReason: "", sameAddress: false,
     fullName: "", occupation: "", phone: "", homePhone: "", officePhone: "",
     mobilePhone: "", email: "", address: "",
   };
@@ -323,6 +532,7 @@ export function emptyApplication(): ApplicationInput {
     custody: "",
     residentialAddress: "",
     livesWith: "",
+    hasOtherCustodians: undefined as never,
     otherCustodians: [],
     child: {
       surname: "", firstName: "", middleName: "", gender: undefined as never, dateOfBirth: "",
@@ -332,15 +542,17 @@ export function emptyApplication(): ApplicationInput {
     homePhone: "",
     previousSchool: "",
     heardAbout: "",
+    introduced: undefined as never,
     introducerName: "",
     introducerPhone: "",
-    childrenAtBomas: 0,
+    childrenAtBomas: "" as never,
+    hasOtherChildren: undefined as never,
     otherChildren: [],
     transport: { bus: "", parentDropOff: "", walksHome: "", other: "" },
     education: {
       neverAttended: false, presentSchool: "", dateFrom: "", dateTo: "", reasonForLeaving: "",
       headTeacher: "", schoolAddress: "", schoolPhone: "", schoolEmail: "",
-      languageOfInstruction: "", difficulties: "",
+      languageOfInstruction: "", hasDifficulties: undefined as never, difficulties: "",
     },
     reasonForChoosing: "",
     health: {
@@ -358,9 +570,12 @@ export function emptyApplication(): ApplicationInput {
       ailments: Object.fromEntries(AILMENTS.map((a) => [a.key, undefined])) as never,
       medication: undefined as never,
       medicationDetails: "",
+      hasOtherMedicalInfo: undefined as never,
       otherMedicalInfo: "",
+      hasSpecialInformation: undefined as never,
       specialInformation: "",
     },
+    documents: {},
     declarations: {
       schoolYearFrom: String(year),
       schoolYearTo: String(year + 1),

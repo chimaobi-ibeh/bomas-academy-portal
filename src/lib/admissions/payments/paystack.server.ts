@@ -50,6 +50,9 @@ export function createPaystackProvider(secretKey: string, fetchImpl: typeof fetc
           reference: input.reference,
           callback_url: input.callbackUrl,
           metadata: input.metadata,
+          // Settle the whole payment to the section's own bank account. The subaccount is
+          // created with a 0% share for the main account, and it bears the Paystack fee.
+          ...(input.subaccount ? { subaccount: input.subaccount, bearer: "subaccount" } : {}),
         }),
       });
       if (!data?.authorization_url?.startsWith("https://")) {
@@ -67,6 +70,7 @@ export function createPaystackProvider(secretKey: string, fetchImpl: typeof fetc
         paid_at: string | null;
         id: number;
         gateway_response?: string;
+        subaccount?: { subaccount_code?: string } | null;
       };
       try {
         data = await call(`/transaction/verify/${encodeURIComponent(reference)}`);
@@ -86,6 +90,7 @@ export function createPaystackProvider(secretKey: string, fetchImpl: typeof fetc
           paidAt: data.paid_at ?? new Date().toISOString(),
           transactionId: String(data.id),
           gatewayResponse: data.gateway_response,
+          subaccount: data.subaccount?.subaccount_code ?? null,
         };
       }
       if (data.status === "failed" || data.status === "reversed") {

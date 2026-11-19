@@ -26,7 +26,14 @@ export const createAdmissionApplication = createServerFn({ method: "POST" })
   .validator(
     z.object({
       form: z.unknown(),
-      uploads: z.object({ passport: declared, birthCertificate: declared }),
+      uploads: z.object({
+        passport: declared,
+        birthCertificate: declared,
+        fatherPassport: declared.optional(),
+        motherPassport: declared.optional(),
+        immunisationCard: declared.optional(),
+        surgicalReport: declared.optional(),
+      }),
     }),
   )
   .handler(async ({ data }) => {

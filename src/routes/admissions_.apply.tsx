@@ -93,7 +93,12 @@ function ApplyPage() {
             <li>A debit card or bank account to pay the fee</li>
           </ul>
           <p className="mt-4 text-sm text-muted-foreground">
-            Your answers are kept in this browser tab until you submit, so you can go back and change them.
+            The parents' passport photographs, the immunisation card and any surgical report can be uploaded too, or
+            brought to the school office when the school calls you in.
+          </p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Every question must be answered. Your answers are kept in this browser tab until you submit, so you can go
+            back and change them.
           </p>
         </aside>
       </section>

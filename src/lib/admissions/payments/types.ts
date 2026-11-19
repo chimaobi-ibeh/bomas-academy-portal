@@ -10,6 +10,11 @@ export type InitializeInput = {
   currency: "NGN";
   email: string;
   callbackUrl: string;
+  /**
+   * The settlement account the money must go to. With Paystack this is a subaccount code
+   * (ACCT_...): the whole amount is settled to that subaccount's bank account.
+   */
+  subaccount?: string;
   /** Non-sensitive metadata only (no health or identity details). */
   metadata: Record<string, string>;
 };
@@ -25,6 +30,8 @@ export type VerifyResult =
       paidAt: string;
       transactionId: string;
       gatewayResponse?: string;
+      /** The subaccount the provider settled the payment to, if any. */
+      subaccount?: string | null;
     }
   | { status: "failed" | "abandoned"; reference: string; gatewayResponse?: string }
   /** Still in progress, or the provider has no record yet. */

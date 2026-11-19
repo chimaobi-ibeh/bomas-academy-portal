@@ -1,5 +1,6 @@
 import type { AdmissionsConfig } from "./config.server";
-import { BRING_TO_SCHOOL, PAYMENT_DISCLAIMER } from "./original-text";
+import { PAYMENT_DISCLAIMER } from "./original-text";
+import { SCHOOL_SECTIONS, documentsToBring, schoolSection } from "./schema";
 import { formatMoney } from "./format";
 import type { ApplicationRow } from "./store";
 
@@ -77,12 +78,21 @@ function button(href: string, label: string) {
   return `<p style="margin:20px 0"><a href="${esc(href)}" style="display:inline-block;background:#d9a833;color:#1c2a5c;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:6px">${esc(label)}</a></p>`;
 }
 
+function sectionLabel(app: ApplicationRow) {
+  return SCHOOL_SECTIONS[app.school_section ?? schoolSection(app.class_applied)].label;
+}
+
+function toBring(app: ApplicationRow) {
+  return documentsToBring(app.form_data as never);
+}
+
 /** School notification: summary only. No health, identity or document contents. */
 export function schoolEmail(app: ApplicationRow, link: string, config: AdmissionsConfig): OutgoingEmail {
   const summary: [string, string][] = [
     ["Student", app.student_name],
     ["Parent / guardian", app.parent_name],
     ["Class applied for", app.class_applied],
+    ["School section (fee account)", sectionLabel(app)],
     ["Application reference", app.reference],
     ["Payment amount", formatMoney(app.paid_amount_kobo ?? app.fee_amount_kobo, app.currency)],
     ["Payment status", "Paid (verified)"],
@@ -92,8 +102,10 @@ export function schoolEmail(app: ApplicationRow, link: string, config: Admission
   const html = layout(
     "New admission application",
     `<p>A new admission application has been submitted and paid.</p>${rows(summary)}
-<p>Open the secure link below to download the completed Admission Form, Class Form, receipt, passport photograph and birth certificate. The link is private to the school; please do not forward it.</p>
+<p>Open the secure link below to download the completed Admission Form, Class Form, receipt and the documents the parent uploaded. The link is private to the school; please do not forward it.</p>
 ${button(link, "View application documents")}
+<p><b>To collect from the family in person:</b></p>
+<ul style="padding-left:18px">${toBring(app).map((b) => `<li>${esc(b)}</li>`).join("")}</ul>
 <p style="font-size:13px;color:#6b7280">Health details and documents are not included in this email for privacy.${config.testMode ? " <b>TEST MODE: no real money was taken.</b>" : ""}</p>`,
   );
   const text = `A new admission application has been submitted and paid.
@@ -102,6 +114,9 @@ ${summary.map(([k, v]) => `${k}: ${v}`).join("\n")}
 
 Secure link to the documents (private to the school, do not forward):
 ${link}
+
+To collect from the family in person:
+${toBring(app).map((b) => `- ${b}`).join("\n")}
 ${config.testMode ? "\nTEST MODE: no real money was taken.\n" : ""}`;
   return {
     to: config.schoolEmail,
@@ -128,8 +143,8 @@ export function parentEmail(app: ApplicationRow, link: string, config: Admission
     `<p>Thank you. Your application to Bomas Academy has been received and your payment has been confirmed.</p>${rows(summary)}
 <p>Use the button below to download your payment receipt, the completed Admission Form and the completed Class Form.</p>
 ${button(link, "Download your documents")}
-<p><b>Please bring the following to the school office:</b></p>
-<ul style="padding-left:18px">${BRING_TO_SCHOOL.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>
+<p><b>Please bring the following to the school office when the school calls you in:</b></p>
+<ul style="padding-left:18px">${toBring(app).map((b) => `<li>${esc(b)}</li>`).join("")}</ul>
 <p style="font-size:14px"><b>${esc(PAYMENT_DISCLAIMER)}</b> The school will contact you about the next steps.</p>
 <p style="font-size:13px;color:#6b7280">Keep this email private: the link gives access to your child's application. If you have questions, reply to this email or contact ${esc(config.schoolEmail)}.${config.testMode ? " <b>TEST MODE: no real money was taken.</b>" : ""}</p>`,
   );
@@ -140,8 +155,8 @@ ${summary.map(([k, v]) => `${k}: ${v}`).join("\n")}
 Download your receipt, Admission Form and Class Form:
 ${link}
 
-Please bring the following to the school office:
-${BRING_TO_SCHOOL.map((b) => `- ${b}`).join("\n")}
+Please bring the following to the school office when the school calls you in:
+${toBring(app).map((b) => `- ${b}`).join("\n")}
 
 ${PAYMENT_DISCLAIMER} The school will contact you about the next steps.
 Keep this email private: the link gives access to your child's application.`;

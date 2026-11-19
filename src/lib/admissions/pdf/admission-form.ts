@@ -187,7 +187,10 @@ async function form1(doc: PDFDocument, input: DocumentInput, overflow: Overflow[
   s.field("Tribe:", d.child.tribe, 280, top, 398);
   s.field("Religion:", d.child.religion, 398, top, R);
   row(20); s.field("Class in which Admission is Sought:", d.child.classSought, L + 6, top, R);
-  row(20); s.field("Name/Address of previous School:", d.previousSchool, L + 6, top, R);
+  const previousSchool =
+    d.previousSchool ||
+    (d.education.neverAttended ? "None" : [d.education.presentSchool, d.education.schoolAddress].filter(Boolean).join(", "));
+  row(20); s.field("Name/Address of previous School:", previousSchool, L + 6, top, R);
   row(20); s.field("How did you hear about us?", d.heardAbout, L + 6, top, R);
   row(20); s.field("Name of the person who introduced you to the School:", d.introducerName, L + 6, top, R);
   row(18);
@@ -199,8 +202,9 @@ async function form1(doc: PDFDocument, input: DocumentInput, overflow: Overflow[
   s.line(sigX, top + 1.2, 405, top + 1.2);
   s.esign(d.declarations.signatureName, sigX + 3, top, 405 - sigX - 6);
   s.field("Date:", formatDate(input.submittedAt), 410, top, R);
-  row(19); s.field("Father's Occupation:", d.father.occupation, L, top, R);
-  row(19); s.field("Mother's Occupation:", d.mother.occupation, L, top, R);
+  const occupation = (p: typeof d.father) => (p.unavailable ? `Not given (${p.unavailableReason})` : p.occupation);
+  row(19); s.field("Father's Occupation:", occupation(d.father), L, top, R);
+  row(19); s.field("Mother's Occupation:", occupation(d.mother), L, top, R);
   row(20);
   s.field("Phone numbers:  Father:", d.father.phone, L, top, 368);
   s.field("Mother:", d.mother.phone, 383, top, R);

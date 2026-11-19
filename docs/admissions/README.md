@@ -27,15 +27,16 @@ through 60-second signed links). The parent gets a confirmation with a private d
 | PDFs | `src/lib/admissions/pdf/` (`admission-form.ts`, `class-form.ts`, `receipt.ts`, `kit.ts`) |
 | Pages | `src/routes/admissions_.apply.tsx`, `admissions_.application.tsx`, `admissions_.office.tsx`, `src/components/admissions/*` |
 | Endpoints | `src/lib/api/admissions.functions.ts`, `src/routes/api/payments/paystack-webhook.ts`, `src/routes/api/admissions/documents.ts`, `src/routes/api/admissions/reconcile.ts` |
-| Database | `supabase/migrations/20261118120000_admissions.sql` |
+| Database | `supabase/migrations/20261118120000_admissions.sql`, `supabase/migrations/20261119120000_admissions_sections_documents.sql` |
 | Ops | `scripts/export-admissions.mjs`, `.env.example`, daily cron in `vite.config.ts` |
 | Tests | `tests/admissions/*` (`npm test`) |
 | Changed | `src/routes/admissions.tsx` (Apply online button), `src/components/site-header.tsx` (menu link), `src/integrations/supabase/types.ts` (new tables), `package.json` (pdf-lib, fflate; vitest, pglite for tests) |
 
 ## 1. Supabase setup
 
-1. Apply the migration to project `zlontmoisvivkudffqkp`: Supabase dashboard -> SQL Editor ->
-   paste `supabase/migrations/20261118120000_admissions.sql` -> Run (or `supabase db push`).
+1. Apply both migrations, in order, to project `zlontmoisvivkudffqkp`: Supabase dashboard -> SQL Editor ->
+   paste `supabase/migrations/20261118120000_admissions.sql` -> Run, then
+   `supabase/migrations/20261119120000_admissions_sections_documents.sql` -> Run (or `supabase db push`).
 2. Check: Table Editor shows `admission_applications`, `admission_payment_attempts`,
    `admission_rate_limits`, each with RLS **enabled** and **no policies**. Storage shows a
    **private** bucket `admission-documents` (5 MB, JPEG/PNG/PDF).
@@ -47,6 +48,8 @@ through 60-second signed links). The parent gets a confirmation with a private d
 | --- | --- | --- |
 | `PAYMENT_PROVIDER` | `paystack` | Yes, to enable payment |
 | `PAYSTACK_SECRET_KEY` | `sk_test_...` first; `sk_live_...` only after approval | Yes |
+| `PAYSTACK_SUBACCOUNT_NURSERY_PRIMARY` | Subaccount code (`ACCT_...`) for the nursery/primary bank account | Yes |
+| `PAYSTACK_SUBACCOUNT_SECONDARY` | Subaccount code (`ACCT_...`) for the secondary school bank account | Yes |
 | `ADMISSION_FEE_NGN` | Fee in naira, e.g. `10000` (**not yet confirmed by Bomas**) | Yes |
 | `ADMISSIONS_LINK_SECRET` | 32+ random characters (e.g. `openssl rand -base64 48`) | Yes |
 | `CRON_SECRET` | Random string; Vercel sends it to the daily job | Yes |
@@ -55,7 +58,8 @@ through 60-second signed links). The parent gets a confirmation with a private d
 | `ADMISSIONS_FROM_EMAIL` | Defaults to `CONTACT_FROM_EMAIL` (a verified Resend domain address) | No |
 | `SITE_URL` | Defaults to `https://www.bomasacademy.org` | No |
 
-Payment stays off (the apply page shows "opening soon") until the first four are set.
+Payment stays off (the apply page shows "opening soon") until all the required ones are set,
+including both subaccounts, so a fee can never be settled to the wrong school account.
 
 ## 3. Paystack configuration
 
@@ -64,9 +68,20 @@ Payment stays off (the apply page shows "opening soon") until the first four are
    - Copy the **Test Secret Key** into `PAYSTACK_SECRET_KEY`.
    - Webhook URL: `https://www.bomasacademy.org/api/payments/paystack-webhook`
    - Callback URL can stay empty; the site sends its own per payment.
-3. Test with Paystack's test cards (success, decline, and so on) on the live site while test keys are set.
+3. Two school bank accounts: Paystack dashboard -> Settings -> Subaccounts (or Payments ->
+   Subaccounts) -> create one subaccount per bank account:
+   - "Bomas Academy Nursery and Primary": the nursery/primary bank account.
+   - "Bomas Academy Secondary": the secondary school bank account.
+   - Set the main account's share (percentage charge) to **0**, so the whole fee settles to the
+     subaccount. The site sends `bearer: subaccount`, so the Paystack fee comes out of that payment.
+   - Copy each subaccount code (`ACCT_...`) into `PAYSTACK_SUBACCOUNT_NURSERY_PRIMARY` and
+     `PAYSTACK_SUBACCOUNT_SECONDARY`. Test mode needs its own test subaccounts; live mode needs live ones.
+   The class chosen decides the account: Pre-Dawn to Primary Six -> nursery/primary; JSS 1 to SSS 3 ->
+   secondary. It is fixed when the application is saved, recorded on every payment attempt, shown in
+   the school email and on the school page, and sent to Paystack as metadata ("school_section").
+4. Test with Paystack's test cards (success, decline, and so on) on the live site while test keys are set.
    A yellow "Test mode" banner shows on the form and "TEST MODE" in emails.
-4. Go live only after Bomas approves: complete Paystack business verification, then swap in
+5. Go live only after Bomas approves: complete Paystack business verification, then swap in
    `sk_live_...` and set the live webhook URL. Redeploy.
 
 ## 4. Email configuration
@@ -100,7 +115,7 @@ notification emails are a second record of every submission.
 
 ## 7. Testing results
 
-`npm test`: **32 tests, all passing**. The database tests run the real migration on an in-process
+`npm test`: **48 tests, all passing**. The database tests run the real migration on an in-process
 Postgres (PGlite), so the payment locking and idempotency are exercised for real.
 
 | # | Brief requirement | Result |

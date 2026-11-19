@@ -24,6 +24,7 @@ export function FieldShell({
   hint,
   error,
   required,
+  optionalText = "(optional)",
   children,
   className,
 }: {
@@ -32,6 +33,8 @@ export function FieldShell({
   hint?: ReactNode;
   error?: string;
   required?: boolean;
+  /** Shown instead of the star when the answer may not exist, e.g. "(if you have one)". */
+  optionalText?: string;
   children: ReactNode;
   className?: string;
 }) {
@@ -44,7 +47,7 @@ export function FieldShell({
             {" "}*
           </span>
         ) : (
-          <span className="font-sans text-sm font-normal text-muted-foreground"> (optional)</span>
+          <span className="font-sans text-sm font-normal text-muted-foreground"> {optionalText}</span>
         )}
       </label>
       {hint && (
@@ -67,6 +70,7 @@ type Common<T extends FieldValues> = {
   label: ReactNode;
   hint?: ReactNode;
   required?: boolean;
+  optionalText?: string;
   className?: string;
 };
 
@@ -75,6 +79,7 @@ export function TextField<T extends FieldValues>({
   label,
   hint,
   required,
+  optionalText,
   className,
   type = "text",
   autoComplete,
@@ -94,7 +99,7 @@ export function TextField<T extends FieldValues>({
   const { register } = useFormContext<T>();
   const error = useFieldError(name);
   return (
-    <FieldShell id={id} label={label} hint={hint} error={error} required={required} className={className}>
+    <FieldShell id={id} label={label} hint={hint} error={error} required={required} optionalText={optionalText} className={className}>
       <input
         id={id}
         type={type}
@@ -263,8 +268,15 @@ export function TickDateField<T extends FieldValues>({ name, label }: { name: st
   const id = useId();
   const { register, watch } = useFormContext<T>();
   const ticked = watch(`${name}.ticked` as Path<T>);
+  const error = useFieldError(`${name}.date`);
   return (
-    <div className="grid grid-cols-[1fr_8.5rem] items-center gap-2 rounded-md border border-input bg-surface p-2 pl-3.5 has-[:checked]:border-navy">
+    <div className="grid gap-1">
+    <div
+      className={cn(
+        "grid grid-cols-[1fr_8.5rem] items-center gap-2 rounded-md border border-input bg-surface p-2 pl-3.5 has-[:checked]:border-navy",
+        error && "border-destructive has-[:checked]:border-destructive",
+      )}
+    >
       <label htmlFor={id} className="flex min-h-10 cursor-pointer items-center gap-2.5 text-base">
         <input id={id} type="checkbox" className="h-5 w-5 accent-[var(--navy)]" {...register(`${name}.ticked` as Path<T>)} />
         {label}
@@ -274,9 +286,16 @@ export function TickDateField<T extends FieldValues>({ name, label }: { name: st
         placeholder="Date or year"
         readOnly={!ticked}
         tabIndex={ticked ? 0 : -1}
+        aria-invalid={!!error}
         className={cn(control, "min-h-10 px-2.5 py-1.5 text-sm read-only:opacity-40")}
         {...register(`${name}.date` as Path<T>)}
       />
+    </div>
+    {error && (
+      <p role="alert" className="text-sm font-medium text-destructive">
+        {label}: {error.toLowerCase()}
+      </p>
+    )}
     </div>
   );
 }

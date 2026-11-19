@@ -63,7 +63,7 @@ describe("1, 7. successful application and payment", () => {
     const school = ctx.mail.sent.find((m) => m.to === "bomasacademy@gmail.com")!;
     expect(school.subject).toBe(`New Admission Application — ${a.reference}`);
     // No health or identity details in the school email
-    expect(school.text).not.toMatch(/allergy|groundnut|Yellow fever|birth certificate/i);
+    expect(school.text).not.toMatch(/allergy|groundnut|Yellow fever/i);
     expect(school.text).toContain("DANIEL NANMWA DUNG");
 
     // Checking again changes nothing
@@ -289,12 +289,12 @@ describe("15. secure document retrieval", () => {
       "NOT_FOUND",
     );
     await expectError(
-      getDocument(ctx.deps, { reference: a.reference, token: a.token, audience: "parent", kind: "birth-certificate" }, freshHeaders()),
+      getDocument(ctx.deps, { reference: a.reference, token: a.token, audience: "parent", kind: "birthCertificate" }, freshHeaders()),
       "NOT_FOUND",
     );
     const app = (await ctx.store.getApplicationByReference(a.reference))!;
     const schoolToken = accessToken(ctx.deps.config.linkSecret, "school", app.reference, app.id);
-    const original = await getDocument(ctx.deps, { reference: a.reference, token: schoolToken, audience: "school", kind: "birth-certificate" }, freshHeaders());
+    const original = await getDocument(ctx.deps, { reference: a.reference, token: schoolToken, audience: "school", kind: "birthCertificate" }, freshHeaders());
     expect(original).toEqual({ type: "redirect", url: expect.stringContaining("expires=60") });
 
     // An unknown reference looks exactly like a wrong token

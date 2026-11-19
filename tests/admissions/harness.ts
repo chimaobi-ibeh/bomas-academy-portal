@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import type { AdmissionsConfig } from "@/lib/admissions/config.server";
 import type { Mailer, OutgoingEmail } from "@/lib/admissions/email.server";
-import type { PaymentProvider, VerifyResult } from "@/lib/admissions/payments/types";
+import type { InitializeInput, PaymentProvider, VerifyResult } from "@/lib/admissions/payments/types";
 import type { Deps } from "@/lib/admissions/service.server";
 import {
   DuplicateKeyError,
@@ -19,9 +19,8 @@ import {
  * locking and idempotency of finalize_admission_payment are exercised for real.
  */
 
-const MIGRATION = readFileSync(
-  join(__dirname, "../../supabase/migrations/20261118120000_admissions.sql"),
-  "utf8",
+const MIGRATIONS = ["20261118120000_admissions.sql", "20261119120000_admissions_sections_documents.sql"].map((f) =>
+  readFileSync(join(__dirname, "../../supabase/migrations", f), "utf8"),
 );
 
 export async function createDb() {
@@ -34,11 +33,11 @@ export async function createDb() {
     CREATE OR REPLACE FUNCTION public.set_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN NEW.updated_at = now(); RETURN NEW; END; $$;
   `);
-  await db.exec(MIGRATION);
+  for (const m of MIGRATIONS) await db.exec(m);
   return db;
 }
 
-const JSON_COLS = new Set(["form_data"]);
+const JSON_COLS = new Set(["form_data", "extra_documents"]);
 
 function toIso<T extends Record<string, unknown>>(row: T): T {
   const out: Record<string, unknown> = {};
@@ -198,10 +197,12 @@ export function createMemoryStorage() {
 export function createFakeProvider() {
   const outcomes = new Map<string, VerifyResult>();
   const initialized: string[] = [];
+  const inputs: InitializeInput[] = [];
   const provider: PaymentProvider = {
     name: "paystack",
     async initialize(input) {
       initialized.push(input.reference);
+      inputs.push(input);
       return { checkoutUrl: `https://checkout.example/${input.reference}` };
     },
     async verify(reference) {
@@ -213,14 +214,15 @@ export function createFakeProvider() {
       return { type: e.event === "charge.success" ? "charge.success" : "other", reference: e.data.reference };
     },
   };
-  const pay = (reference: string, amountKobo: number, currency = "NGN") =>
+  const pay = (reference: string, amountKobo: number, currency = "NGN", subaccount?: string) =>
     outcomes.set(reference, {
       status: "success", reference, amountKobo, currency,
       paidAt: "2026-11-18T10:15:00.000Z", transactionId: `txn-${reference}`,
+      subaccount: subaccount ?? inputs.find((i) => i.reference === reference)?.subaccount ?? null,
     });
   const fail = (reference: string) => outcomes.set(reference, { status: "failed", reference, gatewayResponse: "Declined" });
   const abandon = (reference: string) => outcomes.set(reference, { status: "abandoned", reference });
-  return { provider, initialized, pay, fail, abandon };
+  return { provider, initialized, inputs, pay, fail, abandon };
 }
 
 export function createFakeMailer() {
@@ -242,6 +244,7 @@ export function testConfig(over: Partial<AdmissionsConfig> = {}): AdmissionsConf
     currency: "NGN",
     provider: "paystack",
     paystackSecret: "sk_test_x",
+    subaccounts: { "nursery-primary": "ACCT_nurseryprimary", secondary: "ACCT_secondary" },
     testMode: true,
     paymentsEnabled: true,
     siteUrl: "https://www.bomasacademy.org",

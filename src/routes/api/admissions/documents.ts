@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
+import { UPLOAD_KINDS } from "@/lib/admissions/schema";
 
-const KINDS = ["admission-form", "class-form", "receipt", "all", "passport", "birth-certificate"] as const;
+const KINDS = ["admission-form", "class-form", "receipt", "all", ...UPLOAD_KINDS] as const;
 
 function page(status: number, message: string) {
   const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Bomas Academy</title>

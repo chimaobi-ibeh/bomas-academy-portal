@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FormProvider, useForm, useFormContext, type FieldPath } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate } from "@tanstack/react-router";
@@ -10,15 +10,22 @@ import {
   INOCULATIONS,
   MARITAL_STATUSES,
   NIGERIAN_STATES,
+  REQUIRED_UPLOAD_KINDS,
+  SCHOOL_SECTIONS,
   UPLOADS,
+  UPLOAD_KINDS,
   applicationSchema,
   crossFieldIssues,
+  documentsToBring,
   emptyApplication,
+  optionalDocumentsFor,
+  schoolSection,
+  uploadsFor,
   type ApplicationData,
   type ApplicationInput,
   type UploadKind,
 } from "@/lib/admissions/schema";
-import { BRING_TO_SCHOOL, CLASS_FORM_DECLARATION, HOME_SCHOOL_AGREEMENT, PAYMENT_DISCLAIMER } from "@/lib/admissions/original-text";
+import { CLASS_FORM_DECLARATION, HOME_SCHOOL_AGREEMENT, PAYMENT_DISCLAIMER } from "@/lib/admissions/original-text";
 import { formatNaira } from "@/lib/admissions/format";
 import {
   createAdmissionApplication,
@@ -52,39 +59,64 @@ const STEPS: { key: StepKey; title: string; short: string; fields: string[] }[] 
     key: "parent",
     title: "Parent or guardian",
     short: "Parent",
-    fields: ["applicant", "father", "mother", "maritalStatus", "custody", "residentialAddress", "livesWith", "homePhone", "otherCustodians"],
+    fields: ["applicant", "father", "mother", "maritalStatus", "custody", "residentialAddress", "livesWith", "homePhone", "hasOtherCustodians", "otherCustodians"],
   },
   {
     key: "child",
     title: "About your child",
     short: "Child",
-    fields: ["child", "previousSchool", "heardAbout", "introducerName", "introducerPhone", "childrenAtBomas", "otherChildren", "transport"],
+    fields: ["child", "heardAbout", "introduced", "introducerName", "introducerPhone", "childrenAtBomas", "hasOtherChildren", "otherChildren", "transport"],
   },
-  { key: "education", title: "Educational background", short: "School", fields: ["education", "reasonForChoosing"] },
+  { key: "education", title: "Educational background", short: "School", fields: ["education", "previousSchool", "reasonForChoosing"] },
   { key: "health", title: "Health record", short: "Health", fields: ["health"] },
-  { key: "documents", title: "Documents", short: "Documents", fields: [] },
+  { key: "documents", title: "Documents", short: "Documents", fields: ["documents"] },
   { key: "agreements", title: "Declaration and agreement", short: "Agreement", fields: ["declarations"] },
   { key: "review", title: "Review and pay", short: "Pay", fields: [] },
 ];
 
-const DRAFT_KEY = "bomas-admission-draft-v1";
+const DRAFT_KEY = "bomas-admission-draft-v2";
 const TODAY = new Date().toISOString().slice(0, 10);
 
 type Info = { enabled: boolean; feeKobo: number | null; testMode: boolean };
+type UploadTarget = { path: string; token: string };
 type Pending = {
   reference: string;
   token: string;
   formJson: string;
-  uploads: Record<UploadKind, { path: string; token: string }>;
-  uploaded: Record<UploadKind, boolean>;
+  uploads: Partial<Record<UploadKind, UploadTarget>>;
+  uploaded: Partial<Record<UploadKind, boolean>>;
 };
+type Files = Record<UploadKind, File | null>;
 
-/** Drops empty optional rows so the PDFs do not print blank entries. */
+const noFiles = () => Object.fromEntries(UPLOAD_KINDS.map((k) => [k, null])) as Files;
+
+/**
+ * Removes answers that no longer apply (for example the rows of a question later answered
+ * "No"), so the saved application and the PDFs only contain what the parent meant.
+ */
 function clean(v: ApplicationInput): ApplicationInput {
+  const yes = (x: unknown) => x === "yes";
+  const kinds = optionalDocumentsFor(v as never);
   return {
     ...v,
-    otherCustodians: (v.otherCustodians ?? []).filter((r) => r && (r.name || r.relationship || r.workPhone)),
-    otherChildren: (v.otherChildren ?? []).filter((r) => r && (r.name || r.dateOfBirth)),
+    custody: v.maritalStatus === "Divorced" || v.maritalStatus === "Separated" ? v.custody : "",
+    otherCustodians: yes(v.hasOtherCustodians)
+      ? (v.otherCustodians ?? []).filter((r) => r && (r.name || r.relationship || r.workPhone))
+      : [],
+    introducerName: yes(v.introduced) ? v.introducerName : "",
+    introducerPhone: yes(v.introduced) ? v.introducerPhone : "",
+    otherChildren: yes(v.hasOtherChildren) ? (v.otherChildren ?? []).filter((r) => r && (r.name || r.dateOfBirth)) : [],
+    previousSchool: "",
+    education: v.education && {
+      ...v.education,
+      difficulties: yes(v.education.hasDifficulties) ? v.education.difficulties : "",
+    },
+    health: v.health && {
+      ...v.health,
+      otherMedicalInfo: yes(v.health.hasOtherMedicalInfo) ? v.health.otherMedicalInfo : "",
+      specialInformation: yes(v.health.hasSpecialInformation) ? v.health.specialInformation : "",
+    },
+    documents: Object.fromEntries(kinds.filter((k) => v.documents?.[k]).map((k) => [k, v.documents?.[k]])),
   };
 }
 
@@ -137,7 +169,7 @@ export function ApplyWizard({ info }: { info: Info }) {
     mode: "onTouched",
   });
   const [step, setStep] = useState(0);
-  const [files, setFiles] = useState<Record<UploadKind, File | null>>({ passport: null, birthCertificate: null });
+  const [files, setFiles] = useState<Files>(noFiles);
   const [fileErrors, setFileErrors] = useState<Partial<Record<UploadKind, string>>>({});
   const [pending, setPending] = useState<Pending | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -172,28 +204,29 @@ export function ApplyWizard({ info }: { info: Info }) {
 
   async function validateStep(i: number) {
     const s = STEPS[i];
-    if (s.key === "documents") {
-      const errs: Partial<Record<UploadKind, string>> = {};
-      (Object.keys(UPLOADS) as UploadKind[]).forEach((k) => {
-        const e = checkFile(k, files[k]);
-        if (e) errs[k] = e;
-      });
-      setFileErrors(errs);
-      return Object.keys(errs).length === 0;
-    }
     if (!s.fields.length) return true;
     const ok = await methods.trigger(s.fields as FieldPath<ApplicationInput>[], { shouldFocus: true });
     const extra = crossFieldIssues(methods.getValues() as never).filter((x) => s.fields.includes(String(x.path[0])));
     extra.forEach((x) => methods.setError(x.path.join(".") as FieldPath<ApplicationInput>, { type: "custom", message: x.message }));
-    if (extra.length) {
+    if (ok && extra.length) {
       document.getElementsByName(extra[0].path.join("."))[0]?.focus();
     }
-    return ok && extra.length === 0;
+    let filesOk = true;
+    if (s.key === "documents") {
+      const errs: Partial<Record<UploadKind, string>> = {};
+      for (const k of uploadsFor(methods.getValues() as never)) {
+        const e = checkFile(k, files[k]);
+        if (e) errs[k] = e;
+      }
+      setFileErrors(errs);
+      filesOk = Object.keys(errs).length === 0;
+    }
+    return ok && extra.length === 0 && filesOk;
   }
 
   async function next() {
     if (await validateStep(step)) goTo(Math.min(step + 1, STEPS.length - 1));
-    else setProblem("Please check the highlighted answers.");
+    else setProblem("Please answer the highlighted questions.");
   }
 
   /** Full check before payment; jumps to the first step with a problem. */
@@ -201,7 +234,7 @@ export function ApplyWizard({ info }: { info: Info }) {
     for (let i = 0; i < STEPS.length - 1; i++) {
       if (!(await validateStep(i))) {
         goTo(i);
-        setProblem("Please check the highlighted answers on this step.");
+        setProblem("Please answer the highlighted questions on this step.");
         return null;
       }
     }
@@ -216,14 +249,16 @@ export function ApplyWizard({ info }: { info: Info }) {
     return parsed.data;
   }
 
-  async function upload(p: Pending, prepared: Record<UploadKind, File>) {
-    for (const kind of Object.keys(UPLOADS) as UploadKind[]) {
+  async function upload(p: Pending, prepared: Partial<Record<UploadKind, File>>) {
+    for (const kind of Object.keys(prepared) as UploadKind[]) {
       if (p.uploaded[kind]) continue;
-      setBusy(kind === "passport" ? "Uploading the passport photograph..." : "Uploading the birth certificate...");
       const target = p.uploads[kind];
+      const file = prepared[kind];
+      if (!target || !file) throw new Error("upload");
+      setBusy(`Uploading the ${UPLOADS[kind].label.toLowerCase()}...`);
       const { error } = await supabase.storage
         .from("admission-documents")
-        .uploadToSignedUrl(target.path, target.token, prepared[kind], { contentType: prepared[kind].type, upsert: true });
+        .uploadToSignedUrl(target.path, target.token, file, { contentType: file.type, upsert: true });
       if (error) throw new Error("upload");
       p.uploaded[kind] = true;
     }
@@ -241,45 +276,40 @@ export function ApplyWizard({ info }: { info: Info }) {
     const formJson = JSON.stringify(form);
     try {
       setBusy("Preparing your documents...");
-      const prepared = {
-        passport: await shrinkIfLarge(files.passport!, UPLOADS.passport.maxBytes),
-        birthCertificate: await shrinkIfLarge(files.birthCertificate!, UPLOADS.birthCertificate.maxBytes),
-      };
+      const prepared: Partial<Record<UploadKind, File>> = {};
+      for (const kind of uploadsFor(data)) prepared[kind] = await shrinkIfLarge(files[kind]!, UPLOADS[kind].maxBytes);
 
       // Save the application once. A retry with unchanged answers reuses it.
       let p = pending && pending.formJson === formJson ? pending : null;
       if (!p) {
         setBusy("Saving your application...");
-        const res = await createAdmissionApplication({
-          data: {
-            form,
-            uploads: {
-              passport: { type: prepared.passport.type, size: prepared.passport.size },
-              birthCertificate: { type: prepared.birthCertificate.type, size: prepared.birthCertificate.size },
-            },
-          },
-        });
+        const declared = Object.fromEntries(
+          Object.entries(prepared).map(([k, f]) => [k, { type: f.type, size: f.size }]),
+        ) as { passport: { type: string; size: number }; birthCertificate: { type: string; size: number } };
+        const res = await createAdmissionApplication({ data: { form, uploads: declared } });
         if (!res.ok) return handleError(res);
-        p = { reference: res.reference, token: res.token, formJson, uploads: res.uploads, uploaded: { passport: false, birthCertificate: false } };
+        p = { reference: res.reference, token: res.token, formJson, uploads: res.uploads, uploaded: {} };
         setPending(p);
         savePending({ reference: p.reference, token: p.token });
       }
+      const saved = p;
 
       try {
-        await upload(p, prepared);
+        await upload(saved, prepared);
       } catch {
-        setPending({ ...p });
+        setPending({ ...saved });
         setProblem("A document did not upload. Please check your internet connection and press the button again. Nothing has been charged.");
         return;
       }
 
       setBusy("Opening the secure payment page...");
-      const pay = await startAdmissionPayment({ data: { reference: p.reference, token: p.token } });
+      const pay = await startAdmissionPayment({ data: { reference: saved.reference, token: saved.token } });
       if (!pay.ok) {
         if (pay.code === "DOCUMENTS_INVALID" || pay.code === "DOCUMENTS_MISSING") {
-          const fresh = await refreshAdmissionUploads({ data: { reference: p.reference, token: p.token } });
-          if (fresh.ok) setPending({ ...p, uploads: fresh.uploads, uploaded: { passport: false, birthCertificate: false } });
-          setFileErrors({ [pay.field === "birthCertificate" ? "birthCertificate" : "passport"]: pay.message });
+          const fresh = await refreshAdmissionUploads({ data: { reference: saved.reference, token: saved.token } });
+          if (fresh.ok) setPending({ ...saved, uploads: fresh.uploads, uploaded: {} });
+          const field = (UPLOAD_KINDS as string[]).includes(pay.field ?? "") ? (pay.field as UploadKind) : "passport";
+          setFileErrors({ [field]: pay.message });
           goTo(STEPS.findIndex((s) => s.key === "documents"));
           setProblem(pay.message);
           return;
@@ -288,7 +318,7 @@ export function ApplyWizard({ info }: { info: Info }) {
       }
       if (pay.status === "SUBMITTED") {
         sessionStorage.removeItem(DRAFT_KEY);
-        await navigate({ to: "/admissions/application", search: { ref: p.reference, reference: undefined }, hash: `t=${p.token}` });
+        await navigate({ to: "/admissions/application", search: { ref: saved.reference, reference: undefined }, hash: `t=${saved.token}` });
         return;
       }
       setBusy("Taking you to the payment page...");
@@ -367,6 +397,11 @@ export function ApplyWizard({ info }: { info: Info }) {
         }}
       >
         <h2 className="section-title">{current.title}</h2>
+        {current.key !== "review" && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Every question marked <span className="text-destructive">*</span> must be answered.
+          </p>
+        )}
         <div className="mt-6 grid gap-8">
           {current.key === "parent" && <ParentStep />}
           {current.key === "child" && <ChildStep />}
@@ -434,25 +469,42 @@ function Section({ title, children, note }: { title: string; children: ReactNode
 
 const grid2 = "grid gap-5 sm:grid-cols-2";
 const grid3 = "grid gap-5 sm:grid-cols-3";
+const IF_ANY = "(if you have one)";
 
 function ParentStep() {
   const { watch } = useFormContextTyped();
   const relationship = watch("applicant.relationship");
   const marital = watch("maritalStatus");
-  const parentFields = (who: "father" | "mother", label: string) => (
-    <Section title={label} note="Leave blank anything that does not apply.">
-      <div className={grid2}>
-        <Text name={`${who}.fullName`} label={`${label}'s full name`} autoComplete="off" />
-        <Text name={`${who}.occupation`} label="Occupation" />
-        <Text name={`${who}.phone`} label="Main phone number" type="tel" inputMode="tel" hint="Printed next to 'Phone numbers' on Form 1." />
-        <Text name={`${who}.mobilePhone`} label="Mobile (cell) phone" type="tel" inputMode="tel" />
-        <Text name={`${who}.officePhone`} label="Office (work) phone" type="tel" inputMode="tel" />
-        <Text name={`${who}.homePhone`} label="Home phone" type="tel" inputMode="tel" />
-        <Text name={`${who}.email`} label="Email" type="email" inputMode="email" />
-        <Text name={`${who}.address`} label="Address" hint="Leave blank if it is the child's residential address." />
-      </div>
-    </Section>
-  );
+  const otherCustodians = watch("hasOtherCustodians");
+  const parentFields = (who: "father" | "mother", label: string) => {
+    const unavailable = watch(`${who}.unavailable`);
+    const same = watch(`${who}.sameAddress`);
+    return (
+      <Section title={label}>
+        <Check
+          name={`${who}.unavailable`}
+          label={`I cannot give the ${label.toLowerCase()}'s details (for example, deceased or not in contact)`}
+        />
+        {unavailable ? (
+          <Text name={`${who}.unavailableReason`} label="Please say why" required placeholder="e.g. Deceased" />
+        ) : (
+          <>
+            <div className={grid2}>
+              <Text name={`${who}.fullName`} label={`${label}'s full name`} required autoComplete="off" />
+              <Text name={`${who}.occupation`} label="Occupation" required />
+              <Text name={`${who}.phone`} label="Main phone number" required type="tel" inputMode="tel" />
+              <Text name={`${who}.email`} label="Email" required type="email" inputMode="email" />
+              <Text name={`${who}.mobilePhone`} label="Another mobile number" optionalText={IF_ANY} type="tel" inputMode="tel" />
+              <Text name={`${who}.officePhone`} label="Office (work) phone" optionalText={IF_ANY} type="tel" inputMode="tel" />
+              <Text name={`${who}.homePhone`} label="Home (landline) phone" optionalText={IF_ANY} type="tel" inputMode="tel" />
+            </div>
+            <Check name={`${who}.sameAddress`} label={`The ${label.toLowerCase()}'s address is the same as the child's home address`} />
+            {!same && <Text name={`${who}.address`} label={`${label}'s address`} required />}
+          </>
+        )}
+      </Section>
+    );
+  };
   return (
     <>
       <Section title="You, the person applying" note="Your receipt and documents will be sent to your email address.">
@@ -465,7 +517,7 @@ function ParentStep() {
         <div className={grid3}>
           <Text name="applicant.surname" label="Surname" required autoComplete="family-name" uppercase />
           <Text name="applicant.firstName" label="First name" required autoComplete="given-name" uppercase />
-          <Text name="applicant.middleName" label="Middle name" autoComplete="additional-name" uppercase />
+          <Text name="applicant.middleName" label="Middle name" optionalText={IF_ANY} autoComplete="additional-name" uppercase />
         </div>
         <Choice
           name="applicant.relationship"
@@ -496,34 +548,45 @@ function ParentStep() {
           label="Parental marital status"
           options={MARITAL_STATUSES.map((m) => ({ value: m, label: m }))}
         />
-        {marital === "Divorced" && <Text name="custody" label="Who has custody of the child?" required />}
+        {(marital === "Divorced" || marital === "Separated") && <Text name="custody" label="Who has custody of the child?" required />}
         <Area name="residentialAddress" label="Full residential address in Nigeria" required rows={2} />
         <div className={grid2}>
           <Text name="livesWith" label="Who does the child live with?" required placeholder="e.g. Both parents" />
-          <Text name="homePhone" label="Home phone" type="tel" inputMode="tel" />
+          <Text name="homePhone" label="Home (landline) phone" optionalText={IF_ANY} type="tel" inputMode="tel" />
         </div>
       </Section>
-      <Section title="Other custodial parents or guardians" note="Anyone else who looks after the child. Optional.">
-        {[0, 1].map((i) => (
-          <div key={i} className={grid3}>
-            <Text name={`otherCustodians.${i}.name`} label="Name" />
-            <Text name={`otherCustodians.${i}.relationship`} label="Relationship" />
-            <Text name={`otherCustodians.${i}.workPhone`} label="Work phone" type="tel" inputMode="tel" />
-          </div>
-        ))}
+      <Section title="Other custodial parents or guardians">
+        <YesNo name="hasOtherCustodians" label="Apart from the parents above, does anyone else have custody of or look after the child?" />
+        {otherCustodians === "yes" &&
+          [0, 1].map((i) => (
+            <div key={i} className="grid gap-3">
+              <p className="font-display text-sm font-semibold text-muted-foreground">
+                {i === 0 ? "First person" : "Second person (if there is one)"}
+              </p>
+              <div className={grid3}>
+                <Text name={`otherCustodians.${i}.name`} label="Name" required={i === 0} />
+                <Text name={`otherCustodians.${i}.relationship`} label="Relationship" required={i === 0} />
+                <Text name={`otherCustodians.${i}.workPhone`} label="Phone number" required={i === 0} type="tel" inputMode="tel" />
+              </div>
+            </div>
+          ))}
       </Section>
     </>
   );
 }
 
 function ChildStep() {
+  const { watch } = useFormContextTyped();
+  const introduced = watch("introduced");
+  const siblings = watch("hasOtherChildren");
+  const cls = watch("child.classSought");
   return (
     <>
       <Section title="The child" note="Please write the child's names exactly as on the birth certificate.">
         <div className={grid3}>
           <Text name="child.surname" label="Surname" required uppercase autoComplete="off" />
           <Text name="child.firstName" label="First name" required uppercase autoComplete="off" />
-          <Text name="child.middleName" label="Middle name" uppercase autoComplete="off" />
+          <Text name="child.middleName" label="Middle name" optionalText={IF_ANY} uppercase autoComplete="off" />
         </div>
         <div className={grid2}>
           <Choice name="child.gender" label="Gender" options={[{ value: "Male", label: "Male" }, { value: "Female", label: "Female" }]} />
@@ -532,36 +595,65 @@ function ChildStep() {
         <div className={grid2}>
           <Text name="child.placeOfBirth" label="Place of birth" required />
           <Select name="child.stateOfOrigin" label="State of origin" required options={NIGERIAN_STATES} />
-          <Text name="child.tribe" label="Tribe" />
-          <Text name="child.religion" label="Religion" />
-          <Select name="child.classSought" label="Class in which admission is sought" required options={CLASS_OPTIONS} />
-          <Text name="childrenAtBomas" label="Number of children already attending Bomas Academy" type="number" inputMode="numeric" />
+          <Text name="child.tribe" label="Tribe" required />
+          <Text name="child.religion" label="Religion" required />
+          <Select
+            name="child.classSought"
+            label="Class in which admission is sought"
+            required
+            options={CLASS_OPTIONS}
+            hint={cls ? `The application fee is paid to the ${SCHOOL_SECTIONS[schoolSection(cls)].label} school account.` : undefined}
+          />
+          <Text
+            name="childrenAtBomas"
+            label="Number of children already attending Bomas Academy"
+            required
+            type="number"
+            inputMode="numeric"
+            hint="Enter 0 if none."
+          />
           <Text name="child.primaryLanguage" label="Child's primary language" required />
           <Text name="child.homeLanguage" label="Primary language spoken at home" required />
         </div>
       </Section>
-      <Section title="Previous school and how you found us">
-        <Text name="previousSchool" label="Name and address of previous school" hint="Leave blank if your child has not been to school yet." />
+      <Section title="How you found us">
         <Text name="heardAbout" label="How did you hear about us?" required />
-        <div className={grid2}>
-          <Text name="introducerName" label="Name of the person who introduced you to the school" />
-          <Text name="introducerPhone" label="Their phone number" type="tel" inputMode="tel" />
-        </div>
-      </Section>
-      <Section title="Other children in the family" note="Brothers and sisters. Optional.">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className={grid2}>
-            <Text name={`otherChildren.${i}.name`} label="Name" />
-            <Text name={`otherChildren.${i}.dateOfBirth`} label="Date of birth" type="date" max={TODAY} />
+        <YesNo name="introduced" label="Did someone introduce you to the school?" />
+        {introduced === "yes" && (
+          <div className={grid2}>
+            <Text name="introducerName" label="Name of the person who introduced you to the school" required />
+            <Text name="introducerPhone" label="Their phone number" required type="tel" inputMode="tel" />
           </div>
-        ))}
+        )}
       </Section>
-      <Section title="How does your child get to school and home every day?" note="Fill in whichever applies.">
+      <Section title="Other children in the family">
+        <YesNo name="hasOtherChildren" label="Does the child have brothers or sisters?" />
+        {siblings === "yes" &&
+          [0, 1, 2, 3].map((i) => (
+            <div key={i} className={grid2}>
+              <Text
+                name={`otherChildren.${i}.name`}
+                label={i === 0 ? "Name" : `Name (child ${i + 1}, if any)`}
+                required={i === 0}
+                optionalText=""
+              />
+              <Text
+                name={`otherChildren.${i}.dateOfBirth`}
+                label="Date of birth"
+                required={i === 0}
+                optionalText=""
+                type="date"
+                max={TODAY}
+              />
+            </div>
+          ))}
+      </Section>
+      <Section title="How does your child get to school and home every day?" note="Fill in at least one.">
         <div className={grid2}>
-          <Text name="transport.bus" label="Bus" placeholder="e.g. School bus, Rayfield route" />
-          <Text name="transport.parentDropOff" label="Parent's drop-off / pick-up" placeholder="e.g. Mother drops off" />
-          <Text name="transport.walksHome" label="Walks home" />
-          <Text name="transport.other" label="Other arrangements" />
+          <Text name="transport.bus" label="Bus" optionalText="" placeholder="e.g. School bus, Rayfield route" />
+          <Text name="transport.parentDropOff" label="Parent's drop-off / pick-up" optionalText="" placeholder="e.g. Mother drops off" />
+          <Text name="transport.walksHome" label="Walks home" optionalText="" placeholder="e.g. With an older sibling" />
+          <Text name="transport.other" label="Other arrangements" optionalText="" />
         </div>
       </Section>
     </>
@@ -571,24 +663,25 @@ function ChildStep() {
 function EducationStep() {
   const { watch } = useFormContextTyped();
   const never = watch("education.neverAttended");
+  const difficulties = watch("education.hasDifficulties");
   return (
     <>
       <Section title="Present school" note="This is Form 2 of the Admission Form.">
         <Check name="education.neverAttended" label="My child has not attended any school yet" />
         {!never && (
           <>
-            <Text name="education.presentSchool" label="Present school" />
+            <Text name="education.presentSchool" label="Present (or most recent) school" required />
             <div className={grid2}>
-              <Text name="education.dateFrom" label="Attended from" placeholder="e.g. September 2023" />
-              <Text name="education.dateTo" label="To" placeholder="e.g. July 2026" />
+              <Text name="education.dateFrom" label="Attended from" required placeholder="e.g. September 2023" />
+              <Text name="education.dateTo" label="To" required placeholder="e.g. July 2026" />
             </div>
-            <Text name="education.reasonForLeaving" label="Reason for leaving" />
-            <Text name="education.headTeacher" label="Head teacher (name and title)" />
-            <Text name="education.schoolAddress" label="School address" />
+            <Text name="education.reasonForLeaving" label="Reason for leaving" required />
+            <Text name="education.headTeacher" label="Head teacher (name and title)" required />
+            <Text name="education.schoolAddress" label="School address" required />
             <div className={grid3}>
-              <Text name="education.schoolPhone" label="School phone" type="tel" inputMode="tel" />
-              <Text name="education.schoolEmail" label="School email" type="email" inputMode="email" />
-              <Text name="education.languageOfInstruction" label="Language of instruction" />
+              <Text name="education.schoolPhone" label="School phone" required type="tel" inputMode="tel" />
+              <Text name="education.schoolEmail" label="School email" optionalText="(if the school has one)" type="email" inputMode="email" />
+              <Text name="education.languageOfInstruction" label="Language of instruction" required />
             </div>
             <p className="rounded-md bg-secondary px-4 py-3 text-sm">
               Form 2 has a space for the present head teacher's signature and official stamp. After you apply, please
@@ -598,7 +691,8 @@ function EducationStep() {
         )}
       </Section>
       <Section title="Learning and choosing Bomas">
-        <Area name="education.difficulties" label="Are there any educational difficulties you would like to mention (for example: dyslexia)?" />
+        <YesNo name="education.hasDifficulties" label="Are there any educational difficulties you would like to mention (for example: dyslexia)?" />
+        {difficulties === "yes" && <Area name="education.difficulties" label="Please describe them" required />}
         <Area name="reasonForChoosing" label="Why do you choose to enroll your child in Bomas Academy?" required rows={4} />
       </Section>
     </>
@@ -614,12 +708,12 @@ function HealthStep() {
         <Lock className="mt-0.5 h-4 w-4 shrink-0 text-navy" aria-hidden="true" />
         This report will be treated strictly in confidence. It is stored privately and is not included in emails.
       </p>
-      <Section title="Illnesses" note="Tick any your child has had, and add the date or year if you know it.">
+      <Section title="Illnesses" note="Tick any your child has had, and add the date or year for each one you tick.">
         <div className="grid gap-2 sm:grid-cols-2">
           {ILLNESSES.map((i) => <TickDateField<ApplicationInput> key={i.key} name={`health.illnesses.${i.key}`} label={i.label} />)}
         </div>
       </Section>
-      <Section title="Inoculations" note="Tick the inoculations already given, with dates.">
+      <Section title="Inoculations" note="Tick the inoculations already given, and add the date or year for each one you tick.">
         <div className="grid gap-2 sm:grid-cols-2">
           {INOCULATIONS.map((i) => <TickDateField<ApplicationInput> key={i.key} name={`health.inoculations.${i.key}`} label={i.label} />)}
         </div>
@@ -630,7 +724,7 @@ function HealthStep() {
         <YesNo name="health.hospitalAdmission" label="Has your child been admitted to hospital for any illness?" />
         {h?.hospitalAdmission === "yes" && (
           <div className={grid2}>
-            <Text name="health.hospitalAdmissionYear" label="Year of admission" inputMode="numeric" />
+            <Text name="health.hospitalAdmissionYear" label="Year of admission" required inputMode="numeric" />
             <Text name="health.hospitalAdmissionDetails" label="Kind of illness and duration of admission" required />
           </div>
         )}
@@ -640,7 +734,7 @@ function HealthStep() {
             name="health.surgeryDetails"
             label="Year and type of operation"
             required
-            hint="Please bring the surgical report to the school office."
+            hint="You will be asked for the surgical report on the Documents step."
           />
         )}
       </Section>
@@ -652,11 +746,13 @@ function HealthStep() {
       <Section title="Medication and other information">
         <YesNo name="health.medication" label="Is your child taking any medication at this time?" />
         {h?.medication === "yes" && <Text name="health.medicationDetails" label="Please specify" required />}
-        <Area name="health.otherMedicalInfo" label="Is there any other medical information you would like us to be aware of?" />
-        <Area
-          name="health.specialInformation"
+        <YesNo name="health.hasOtherMedicalInfo" label="Is there any other medical information you would like us to be aware of?" />
+        {h?.hasOtherMedicalInfo === "yes" && <Area name="health.otherMedicalInfo" label="Please give the details" required />}
+        <YesNo
+          name="health.hasSpecialInformation"
           label="Is there any special information that the school should know about this child or other family members that would be of help in providing services for the child?"
         />
+        {h?.hasSpecialInformation === "yes" && <Area name="health.specialInformation" label="Please give the details" required />}
       </Section>
     </>
   );
@@ -667,18 +763,48 @@ function DocumentsStep({
   errors,
   onChange,
 }: {
-  files: Record<UploadKind, File | null>;
+  files: Files;
   errors: Partial<Record<UploadKind, string>>;
   onChange: (kind: UploadKind, file: File | null) => void;
 }) {
+  const { watch } = useFormContextTyped();
+  const values = watch();
+  const optional = optionalDocumentsFor(values as never);
+  const toBring = documentsToBring(values as never);
   return (
     <>
-      {(Object.keys(UPLOADS) as UploadKind[]).map((kind) => (
-        <FileDrop key={kind} kind={kind} file={files[kind]} error={errors[kind]} onChange={(f) => onChange(kind, f)} />
-      ))}
-      <Section title="Please bring these to the school office" note="They are not uploaded online.">
+      <Section
+        title="Required uploads"
+        note="One passport photograph of your child is enough. The school prints any extra copies it needs from it."
+      >
+        {REQUIRED_UPLOAD_KINDS.map((kind) => (
+          <FileDrop key={kind} kind={kind} file={files[kind]} error={errors[kind]} onChange={(f) => onChange(kind, f)} />
+        ))}
+      </Section>
+      <Section
+        title="Other documents"
+        note="For each one, upload it now or choose to bring it to the school office when the school calls you in."
+      >
+        {optional.map((kind) => (
+          <div key={kind} className="grid gap-3 border-t pt-5 first:border-t-0 first:pt-0">
+            <Choice
+              name={`documents.${kind}`}
+              label={UPLOADS[kind].label}
+              options={[
+                { value: "upload", label: "Upload it now" },
+                { value: "bring", label: "I will bring it when called in" },
+              ]}
+              columns="grid-cols-1 sm:flex"
+            />
+            {values.documents?.[kind] === "upload" && (
+              <FileDrop kind={kind} file={files[kind]} error={errors[kind]} onChange={(f) => onChange(kind, f)} hideLabel />
+            )}
+          </div>
+        ))}
+      </Section>
+      <Section title="Please bring these to the school office when called in" note="They cannot be submitted online.">
         <ul className="grid gap-2 text-[15px]">
-          {BRING_TO_SCHOOL.map((b) => (
+          {toBring.map((b) => (
             <li key={b} className="flex gap-2">
               <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-navy" aria-hidden="true" />
               {b}
@@ -690,14 +816,26 @@ function DocumentsStep({
   );
 }
 
-function FileDrop({ kind, file, error, onChange }: { kind: UploadKind; file: File | null; error?: string; onChange: (f: File | null) => void }) {
+function FileDrop({
+  kind,
+  file,
+  error,
+  onChange,
+  hideLabel,
+}: {
+  kind: UploadKind;
+  file: File | null;
+  error?: string;
+  onChange: (f: File | null) => void;
+  hideLabel?: boolean;
+}) {
   const rule = UPLOADS[kind];
   const preview = useMemo(() => (file && file.type.startsWith("image/") ? URL.createObjectURL(file) : null), [file]);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   const id = `upload-${kind}`;
   return (
     <div className="grid gap-2">
-      <label htmlFor={id} className="font-display text-[15px] font-semibold">
+      <label htmlFor={id} className={cn("font-display text-[15px] font-semibold", hideLabel && "sr-only")}>
         {rule.label}
         <span className="text-destructive" aria-hidden="true"> *</span>
       </label>
@@ -790,11 +928,13 @@ function AgreementsStep() {
   );
 }
 
-function ReviewStep({ info, files, onEdit }: { info: Info; files: Record<UploadKind, File | null>; onEdit: (i: number) => void }) {
+function ReviewStep({ info, files, onEdit }: { info: Info; files: Files; onEdit: (i: number) => void }) {
   const { getValues } = useFormContextTyped();
   const v = getValues();
   const name = (p: { firstName?: string; middleName?: string; surname?: string }) =>
     [p.firstName, p.middleName, p.surname].filter(Boolean).join(" ");
+  const parent = (p: ApplicationInput["father"]) =>
+    p?.unavailable ? `Not given (${p.unavailableReason})` : [p?.fullName, p?.phone].filter(Boolean).join(", ");
   const row = (k: string, val: ReactNode) =>
     val ? (
       <div className="grid gap-0.5 py-2 sm:grid-cols-[14rem_1fr] sm:gap-4">
@@ -813,6 +953,7 @@ function ReviewStep({ info, files, onEdit }: { info: Info; files: Record<UploadK
       <dl className="mt-2 divide-y">{rows}</dl>
     </section>
   );
+  const cls = v.child?.classSought;
   return (
     <>
       <p className="text-[15px] text-muted-foreground">
@@ -824,8 +965,8 @@ function ReviewStep({ info, files, onEdit }: { info: Info; files: Record<UploadK
         {row("Relationship", v.applicant?.relationship === "Other" ? v.applicant?.relationshipOther : v.applicant?.relationship)}
         {row("Email", v.applicant?.email)}
         {row("Phone", v.applicant?.phone)}
-        {row("Father", [v.father?.fullName, v.father?.phone].filter(Boolean).join(", "))}
-        {row("Mother", [v.mother?.fullName, v.mother?.phone].filter(Boolean).join(", "))}
+        {row("Father", parent(v.father))}
+        {row("Mother", parent(v.mother))}
         {row("Marital status", v.maritalStatus)}
         {row("Address", v.residentialAddress)}
       </>)}
@@ -833,7 +974,8 @@ function ReviewStep({ info, files, onEdit }: { info: Info; files: Record<UploadK
         {row("Name", name(v.child ?? {}).toUpperCase())}
         {row("Gender", v.child?.gender)}
         {row("Date of birth", v.child?.dateOfBirth)}
-        {row("Class", v.child?.classSought)}
+        {row("Class", cls)}
+        {row("Fee paid to", cls ? `${SCHOOL_SECTIONS[schoolSection(cls)].label} school account` : "")}
         {row("State of origin", v.child?.stateOfOrigin)}
       </>)}
       {block("Educational background", 2, <>
@@ -842,8 +984,15 @@ function ReviewStep({ info, files, onEdit }: { info: Info; files: Record<UploadK
       </>)}
       {block("Health record", 3, <>{row("Completed", "Yes (kept confidential)")}</>)}
       {block("Documents", 4, <>
-        {row("Passport photograph", files.passport?.name)}
-        {row("Birth certificate", files.birthCertificate?.name)}
+        {uploadsFor(v as never).map((k) => (
+          <Fragment key={k}>{row(UPLOADS[k].label, files[k]?.name ?? "Not chosen yet")}</Fragment>
+        ))}
+        {row(
+          "To bring when called in",
+          <ul className="list-disc pl-5">
+            {documentsToBring(v as never).map((b) => <li key={b}>{b}</li>)}
+          </ul>,
+        )}
       </>)}
       {block("Declaration and agreement", 5, <>
         {row("Signed by", v.declarations?.signatureName)}

@@ -66,6 +66,7 @@ function OfficePage() {
                 ["Student", app.studentName],
                 ["Parent / guardian", app.parentName],
                 ["Class applied for", app.classApplied],
+                ["School section (fee account)", app.schoolSection],
                 ["Status", app.status === "SUBMITTED" ? "Submitted and paid" : "Not paid"],
                 ["Amount", formatNaira(app.feeKobo)],
                 ["Receipt number", app.receiptNumber ?? "-"],
@@ -82,8 +83,18 @@ function OfficePage() {
                 reference={app.reference}
                 token={token}
                 audience="school"
-                kinds={["admission-form", "class-form", "receipt", "passport", "birth-certificate", "all"]}
+                kinds={["admission-form", "class-form", "receipt", ...app.documents, "all"]}
               />
+            )}
+            {app.status === "SUBMITTED" && app.toBring.length > 0 && (
+              <div className="rounded-lg border bg-surface p-6">
+                <h2 className="font-display text-lg font-bold">To collect from the family in person</h2>
+                <ul className="mt-3 list-disc space-y-1.5 pl-5">
+                  {app.toBring.map((b) => (
+                    <li key={b}>{b}</li>
+                  ))}
+                </ul>
+              </div>
             )}
           </div>
         )}

@@ -25,6 +25,7 @@ export type Database = {
           documents_verified_at: string | null
           email_attempts: number
           email_locked_until: string | null
+          extra_documents: Json
           fee_amount_kobo: number
           form_data: Json
           form_version: number
@@ -42,6 +43,7 @@ export type Database = {
           receipt_number: string | null
           reference: string
           school_email_sent_at: string | null
+          school_section: "nursery-primary" | "secondary" | null
           status: Database["public"]["Enums"]["admission_status"]
           student_name: string
           submitted_at: string | null
@@ -57,6 +59,7 @@ export type Database = {
           documents_verified_at?: string | null
           email_attempts?: number
           email_locked_until?: string | null
+          extra_documents?: Json
           fee_amount_kobo: number
           form_data: Json
           form_version: number
@@ -74,6 +77,7 @@ export type Database = {
           receipt_number?: string | null
           reference: string
           school_email_sent_at?: string | null
+          school_section?: "nursery-primary" | "secondary" | null
           status?: Database["public"]["Enums"]["admission_status"]
           student_name: string
           submitted_at?: string | null
@@ -97,6 +101,7 @@ export type Database = {
           provider_transaction_id: string | null
           reference: string
           status: "initialized" | "success" | "failed" | "abandoned"
+          subaccount: string | null
           updated_at: string
           verified_at: string | null
         }
@@ -114,6 +119,7 @@ export type Database = {
           provider_transaction_id?: string | null
           reference: string
           status?: "initialized" | "success" | "failed" | "abandoned"
+          subaccount?: string | null
           updated_at?: string
           verified_at?: string | null
         }

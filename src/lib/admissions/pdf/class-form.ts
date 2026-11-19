@@ -85,10 +85,11 @@ async function studentInformationSheet(doc: PDFDocument, input: DocumentInput, o
   s.field("Home Phone:", d.homePhone, 345, top, R, o);
   const parent = (label: string, p: typeof d.father) => {
     step();
-    s.field(`${label}'s Name:`, p.fullName, L, top, 340, o);
+    s.field(`${label}'s Name:`, p.unavailable ? `Not given (${p.unavailableReason})` : p.fullName, L, top, 340, o);
     s.field("Cell Phone:", p.mobilePhone || p.phone, 345, top, R, o);
     step();
-    s.field("Address:", p.address || (p.fullName ? d.residentialAddress : ""), L, top, 340, o);
+    const address = p.unavailable ? "" : p.sameAddress ? d.residentialAddress : p.address || (p.fullName ? d.residentialAddress : "");
+    s.field("Address:", address, L, top, 340, o);
     s.field("Work Phone:", p.officePhone, 345, top, R, o);
   };
   parent("Father", d.father);
@@ -134,7 +135,7 @@ async function studentInformationSheet(doc: PDFDocument, input: DocumentInput, o
   s.line(L + mw + 2, top + 1.2, R, top + 1.2);
   step(20);
   s.line(L, top + 1.2, R, top + 1.2);
-  s.answerLines(h.otherMedicalInfo, L, top, 20, 1, R - L, "Other medical information");
+  s.answerLines(h.hasOtherMedicalInfo === "no" ? "None" : h.otherMedicalInfo, L, top, 20, 1, R - L, "Other medical information");
 
   step(24);
   s.text("Is there any special information that the school should know about this child or other family members that would", L, top, { size: S });
@@ -143,7 +144,7 @@ async function studentInformationSheet(doc: PDFDocument, input: DocumentInput, o
   s.line(L + spw + 2, top + 1.2, R, top + 1.2);
   step(20);
   s.line(L, top + 1.2, R, top + 1.2);
-  s.answerLines(h.specialInformation, L, top, 20, 1, R - L, "Special information about the child");
+  s.answerLines(h.hasSpecialInformation === "no" ? "None" : h.specialInformation, L, top, 20, 1, R - L, "Special information about the child");
 
   step(24);
   s.field("Child's Primary Language:", d.child.primaryLanguage, L, top, 280, o);

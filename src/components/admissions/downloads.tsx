@@ -1,16 +1,20 @@
 import { ArrowDownToLine, FileText } from "@/components/icons";
+import { UPLOADS, type UploadKind } from "@/lib/admissions/schema";
 import { cn } from "@/lib/utils";
 
-type Kind = "receipt" | "admission-form" | "class-form" | "all" | "passport" | "birth-certificate";
+type Kind = "receipt" | "admission-form" | "class-form" | "all" | UploadKind;
 
-const LABELS: Record<Kind, { title: string; note: string }> = {
+const DOCUMENT_LABELS = {
   receipt: { title: "Payment receipt", note: "PDF" },
   "admission-form": { title: "Admission Form", note: "Form 1 and Form 2, PDF" },
   "class-form": { title: "Class Form", note: "Student Information Sheet and Home/School Agreement, PDF" },
   all: { title: "All three documents", note: "ZIP file" },
-  passport: { title: "Passport photograph", note: "As uploaded" },
-  "birth-certificate": { title: "Birth certificate", note: "As uploaded" },
 };
+
+function labelFor(kind: Kind) {
+  if (kind in UPLOADS) return { title: UPLOADS[kind as UploadKind].label, note: "As uploaded" };
+  return DOCUMENT_LABELS[kind as keyof typeof DOCUMENT_LABELS];
+}
 
 /**
  * Each download is a small POST form, so the private token travels in the request body and
@@ -31,7 +35,7 @@ export function DownloadButtons({
     <ul className="grid gap-3 sm:grid-cols-2">
       {kinds.map((kind) => (
         <li key={kind}>
-          <form method="post" action="/api/admissions/documents" target={kind === "passport" || kind === "birth-certificate" ? "_blank" : undefined}>
+          <form method="post" action="/api/admissions/documents" target={kind in UPLOADS ? "_blank" : undefined}>
             <input type="hidden" name="ref" value={reference} />
             <input type="hidden" name="t" value={token} />
             <input type="hidden" name="aud" value={audience} />
@@ -45,8 +49,8 @@ export function DownloadButtons({
             >
               <FileText className="h-6 w-6 shrink-0 text-navy" aria-hidden="true" />
               <span className="min-w-0 flex-1">
-                <span className="block font-display font-semibold">{LABELS[kind].title}</span>
-                <span className="block text-sm text-muted-foreground">{LABELS[kind].note}</span>
+                <span className="block font-display font-semibold">{labelFor(kind).title}</span>
+                <span className="block text-sm text-muted-foreground">{labelFor(kind).note}</span>
               </span>
               <ArrowDownToLine className="h-5 w-5 shrink-0 text-navy" aria-hidden="true" />
             </button>
